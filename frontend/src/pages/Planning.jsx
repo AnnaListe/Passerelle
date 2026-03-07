@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { appointmentsAPI } from '../lib/api';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
-import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { formatTime, formatDate } from '../lib/utils';
+import { Badge } from '../components/ui/badge';
+import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { formatTime } from '../lib/utils';
 
 const Planning = () => {
   const [appointments, setAppointments] = useState([]);
@@ -55,6 +55,7 @@ const Planning = () => {
     setCurrentWeekStart(getWeekStart(new Date()));
   };
 
+  // Generate week days
   const weekDays = [];
   for (let i = 0; i < 7; i++) {
     const date = new Date(currentWeekStart);
@@ -62,12 +63,34 @@ const Planning = () => {
     weekDays.push(date);
   }
 
-  const getAppointmentsForDay = (date) => {
+  // Generate time slots (8h - 20h)
+  const timeSlots = [];
+  for (let hour = 8; hour <= 20; hour++) {
+    timeSlots.push(hour);
+  }
+
+  // Function to get appointments for a specific day and hour
+  const getAppointmentsForSlot = (date, hour) => {
     const dateStr = date.toDateString();
     return appointments.filter(apt => {
       const aptDate = new Date(apt.start_datetime);
-      return aptDate.toDateString() === dateStr;
-    }).sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime));
+      const aptHour = aptDate.getHours();
+      return aptDate.toDateString() === dateStr && aptHour === hour;
+    });
+  };
+
+  // Calculate appointment position and height
+  const calculateAppointmentStyle = (appointment) => {
+    const start = new Date(appointment.start_datetime);
+    const end = new Date(appointment.end_datetime);
+    const startMinutes = start.getMinutes();
+    const durationMinutes = (end - start) / (1000 * 60);
+    
+    return {
+      top: `${(startMinutes / 60) * 100}%`,
+      height: `${(durationMinutes / 60) * 100}%`,
+      minHeight: '40px'
+    };
   };
 
   if (loading) {
@@ -86,7 +109,9 @@ const Planning = () => {
           <h1 className="text-3xl md:text-4xl font-bold text-slate-800 font-outfit mb-2">
             Planning
           </h1>
-          <p className="text-foreground-muted">Vos rendez-vous de la semaine</p>
+          <p className="text-foreground-muted">
+            Semaine du {currentWeekStart.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </p>
         </div>
 
         {/* Week Navigation */}
@@ -118,75 +143,101 @@ const Planning = () => {
         </div>
       </div>
 
-      {/* Week View */}
-      <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
-        {weekDays.map((day, index) => {
-          const dayAppointments = getAppointmentsForDay(day);
-          const isToday = day.toDateString() === new Date().toDateString();
-          
-          return (
-            <Card 
-              key={index}
-              className={isToday ? 'border-primary border-2' : ''}
-              data-testid={`day-${index}`}
-            >
-              <CardHeader className="pb-3">
-                <div className="text-center">
-                  <p className="text-xs font-medium text-foreground-muted uppercase mb-1">
-                    {day.toLocaleDateString('fr-FR', { weekday: 'short' })}
-                  </p>
-                  <p className={`text-2xl font-bold ${
-                    isToday ? 'text-primary' : 'text-slate-800'
-                  }`}>
-                    {day.getDate()}
-                  </p>
-                  <p className="text-xs text-foreground-muted">
-                    {day.toLocaleDateString('fr-FR', { month: 'short' })}
-                  </p>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {dayAppointments.length > 0 ? (
-                  <div className="space-y-2">
-                    {dayAppointments.map((apt) => (
-                      <div 
-                        key={apt.id}
-                        className="p-3 bg-primary-light rounded-lg border border-primary/20"
-                        data-testid={`appointment-${apt.id}`}
-                      >
-                        <div className="flex items-center gap-1 text-xs font-medium text-primary mb-1">
-                          <Clock className="w-3 h-3" />
-                          {formatTime(apt.start_datetime)}
-                        </div>
-                        <p className="text-sm font-medium text-slate-700 mb-1">
-                          {apt.title}
-                        </p>
-                        <p className="text-xs text-foreground-muted">
-                          {apt.appointment_type}
-                        </p>
-                        {apt.location && (
-                          <div className="flex items-center gap-1 text-xs text-foreground-muted mt-1">
-                            <MapPin className="w-3 h-3" />
-                            {apt.location}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+      {/* Calendar Grid */}
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <div className="min-w-[900px]">
+            {/* Header with days */}
+            <div className="grid grid-cols-8 border-b border-slate-200">
+              {/* Empty corner cell */}
+              <div className="p-3 bg-background-subtle border-r border-slate-200"></div>
+              
+              {/* Day headers */}
+              {weekDays.map((day, index) => {
+                const isToday = day.toDateString() === new Date().toDateString();
+                return (
+                  <div 
+                    key={index}
+                    className={`p-3 text-center border-r border-slate-200 last:border-r-0 ${
+                      isToday ? 'bg-primary-light' : 'bg-background-subtle'
+                    }`}
+                  >
+                    <div className={`text-xs font-medium uppercase mb-1 ${
+                      isToday ? 'text-primary' : 'text-foreground-muted'
+                    }`}>
+                      {day.toLocaleDateString('fr-FR', { weekday: 'short' })}
+                    </div>
+                    <div className={`text-xl font-bold ${
+                      isToday ? 'text-primary' : 'text-slate-800'
+                    }`}>
+                      {day.getDate()}
+                    </div>
+                    <div className="text-xs text-foreground-muted">
+                      {day.toLocaleDateString('fr-FR', { month: 'short' })}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-foreground-muted text-center py-4">
-                    Aucun rendez-vous
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                );
+              })}
+            </div>
 
-      {/* Total appointments count */}
+            {/* Time slots grid */}
+            <div className="relative">
+              {timeSlots.map((hour) => (
+                <div key={hour} className="grid grid-cols-8 border-b border-slate-100 last:border-b-0">
+                  {/* Time label */}
+                  <div className="p-2 text-xs text-foreground-muted bg-background-subtle border-r border-slate-200 flex items-start justify-end">
+                    {hour.toString().padStart(2, '0')}:00
+                  </div>
+                  
+                  {/* Day cells */}
+                  {weekDays.map((day, dayIndex) => {
+                    const slotAppointments = getAppointmentsForSlot(day, hour);
+                    return (
+                      <div 
+                        key={`${hour}-${dayIndex}`}
+                        className="relative border-r border-slate-100 last:border-r-0 min-h-[60px] hover:bg-background-subtle/50 transition-colors"
+                        style={{ height: '60px' }}
+                      >
+                        {slotAppointments.map((apt) => {
+                          const style = calculateAppointmentStyle(apt);
+                          return (
+                            <div
+                              key={apt.id}
+                              className="absolute left-0 right-0 mx-1 p-2 bg-primary rounded-lg border border-primary-hover overflow-hidden cursor-pointer hover:shadow-md transition-all"
+                              style={style}
+                              data-testid={`appointment-${apt.id}`}
+                              title={`${apt.title} - ${formatTime(apt.start_datetime)} à ${formatTime(apt.end_datetime)}`}
+                            >
+                              <div className="text-xs font-semibold text-white truncate">
+                                {formatTime(apt.start_datetime)}
+                              </div>
+                              <div className="text-xs text-white/90 font-medium truncate">
+                                {apt.title}
+                              </div>
+                              <div className="text-[10px] text-white/80 truncate">
+                                {apt.appointment_type}
+                              </div>
+                              {apt.location && (
+                                <div className="text-[10px] text-white/70 truncate">
+                                  📍 {apt.location}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Summary */}
       <Card className="bg-gradient-to-br from-primary-light to-white border-primary/20">
-        <CardContent className="pt-6">
+        <div className="p-6">
           <div className="flex items-center justify-center gap-3">
             <Calendar className="w-8 h-8 text-primary" />
             <div>
@@ -194,7 +245,7 @@ const Planning = () => {
               <p className="text-sm text-foreground-muted">rendez-vous cette semaine</p>
             </div>
           </div>
-        </CardContent>
+        </div>
       </Card>
     </div>
   );
