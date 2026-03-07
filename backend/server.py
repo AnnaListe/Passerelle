@@ -1,15 +1,15 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Query
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
-from datetime import datetime, timezone
-
+from datetime import datetime, timezone, timedelta, date
+from typing import List, Optional
+from auth import get_current_user, create_access_token, get_password_hash, verify_password
+from models import *
+import demo_data
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -19,63 +19,9 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
+# Create the main app
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
-
-
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class StatusCheckCreate(BaseModel):
-    client_name: str
-
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
-
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
-
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
-
-# Include the router in the main app
-app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Configure logging
 logging.basicConfig(
@@ -84,6 +30,522 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Initialize demo data
+async def init_demo_data():
+    """Initialize demo data if database is empty"""
+    try:
+        # Check if data exists
+        pro_count = await db.professionals.count_documents({})
+        if pro_count > 0:
+            logger.info("Demo data already exists")
+            return
+        
+        logger.info("Initializing demo data...")
+        
+        # Hash password for demo professional
+        demo_data.demo_professional["password_hash"] = get_password_hash(demo_data.CURRENT_PROFESSIONAL_PASSWORD)
+        
+        # Insert data
+        await db.professionals.insert_one(demo_data.demo_professional)
+        await db.professionals.insert_many(demo_data.other_professionals)
+        await db.parents.insert_many(demo_data.parents)
+        await db.children.insert_many(demo_data.children)
+        await db.children_schooling.insert_many(demo_data.children_schooling)
+        await db.child_professional_links.insert_many(demo_data.child_professional_links)
+        await db.medical_profiles.insert_many(demo_data.medical_profiles)
+        await db.communication_profiles.insert_many(demo_data.communication_profiles)
+        await db.goals.insert_many(demo_data.goals)
+        await db.additional_infos.insert_many(demo_data.additional_infos)
+        await db.family_contacts.insert_many(demo_data.family_contacts)
+        await db.weekly_schedules.insert_many(demo_data.weekly_schedules)
+        await db.appointments.insert_many(demo_data.appointments)
+        await db.conversations.insert_many(demo_data.conversations)
+        await db.messages.insert_many(demo_data.messages)
+        await db.professional_conversations.insert_many(demo_data.professional_conversations)
+        await db.professional_messages.insert_many(demo_data.professional_messages)
+        await db.documents.insert_many(demo_data.documents)
+        await db.invoices.insert_many(demo_data.invoices)
+        
+        logger.info("Demo data initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing demo data: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    await init_demo_data()
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+# AUTH ROUTES
+@api_router.post("/auth/login", response_model=LoginResponse)
+async def login(input_data: LoginInput):
+    """Login professional"""
+    pro_doc = await db.professionals.find_one({"email": input_data.email}, {"_id": 0})
+    if not pro_doc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou mot de passe incorrect")
+    
+    password_hash = pro_doc.get("password_hash", "")
+    if not verify_password(input_data.password, password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou mot de passe incorrect")
+    
+    # Create token
+    token = create_access_token(data={"sub": pro_doc["id"]})
+    
+    # Remove password_hash from response
+    pro_doc.pop("password_hash", None)
+    professional = Professional(**pro_doc)
+    
+    return LoginResponse(token=token, professional=professional)
+
+@api_router.get("/auth/me", response_model=Professional)
+async def get_current_professional(professional_id: str = Depends(get_current_user)):
+    """Get current professional info"""
+    pro_doc = await db.professionals.find_one({"id": professional_id}, {"_id": 0, "password_hash": 0})
+    if not pro_doc:
+        raise HTTPException(status_code=404, detail="Professionnel non trouvé")
+    return Professional(**pro_doc)
+
+# PROFESSIONAL ROUTES
+@api_router.get("/professionals/{professional_id}", response_model=Professional)
+async def get_professional(professional_id: str, current_user_id: str = Depends(get_current_user)):
+    """Get professional by ID"""
+    pro_doc = await db.professionals.find_one({"id": professional_id}, {"_id": 0, "password_hash": 0})
+    if not pro_doc:
+        raise HTTPException(status_code=404, detail="Professionnel non trouvé")
+    return Professional(**pro_doc)
+
+# CHILDREN ROUTES
+@api_router.get("/children", response_model=List[Child])
+async def get_children(professional_id: str = Depends(get_current_user)):
+    """Get all children followed by current professional"""
+    # Get child IDs from links
+    links = await db.child_professional_links.find(
+        {"professional_id": professional_id, "active": True},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    child_ids = [link["child_id"] for link in links]
+    
+    # Get children
+    children_docs = await db.children.find(
+        {"id": {"$in": child_ids}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    return [Child(**child) for child in children_docs]
+
+@api_router.get("/children/{child_id}", response_model=ChildDetailResponse)
+async def get_child_detail(child_id: str, professional_id: str = Depends(get_current_user)):
+    """Get detailed child information"""
+    # Verify access
+    link = await db.child_professional_links.find_one({
+        "child_id": child_id,
+        "professional_id": professional_id,
+        "active": True
+    })
+    if not link:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+    
+    # Get child
+    child_doc = await db.children.find_one({"id": child_id}, {"_id": 0})
+    if not child_doc:
+        raise HTTPException(status_code=404, detail="Enfant non trouvé")
+    
+    # Get related data
+    schooling_doc = await db.children_schooling.find_one({"child_id": child_id}, {"_id": 0})
+    weekly_schedule_docs = await db.weekly_schedules.find({"child_id": child_id}, {"_id": 0}).to_list(1000)
+    medical_doc = await db.medical_profiles.find_one({"child_id": child_id}, {"_id": 0})
+    communication_doc = await db.communication_profiles.find_one({"child_id": child_id}, {"_id": 0})
+    goals_doc = await db.goals.find_one({"child_id": child_id}, {"_id": 0})
+    additional_doc = await db.additional_infos.find_one({"child_id": child_id}, {"_id": 0})
+    family_contacts_doc = await db.family_contacts.find_one({"child_id": child_id}, {"_id": 0})
+    
+    # Get professionals
+    pro_links = await db.child_professional_links.find({"child_id": child_id, "active": True}, {"_id": 0}).to_list(1000)
+    pro_ids = [link["professional_id"] for link in pro_links]
+    professionals_docs = await db.professionals.find({"id": {"$in": pro_ids}}, {"_id": 0, "password_hash": 0}).to_list(1000)
+    
+    # Get parent
+    parent_id = demo_data.child_parent_map.get(child_id)
+    parent_doc = None
+    if parent_id:
+        parent_doc = await db.parents.find_one({"id": parent_id}, {"_id": 0})
+    
+    return ChildDetailResponse(
+        child=Child(**child_doc),
+        schooling=ChildSchooling(**schooling_doc) if schooling_doc else None,
+        weekly_schedule=[ChildWeeklySchedule(**s) for s in weekly_schedule_docs],
+        medical_profile=ChildMedicalProfile(**medical_doc) if medical_doc else None,
+        communication_profile=ChildCommunicationProfile(**communication_doc) if communication_doc else None,
+        goals=ChildGoals(**goals_doc) if goals_doc else None,
+        additional_info=ChildAdditionalInfo(**additional_doc) if additional_doc else None,
+        family_contacts=FamilyContacts(**family_contacts_doc) if family_contacts_doc else None,
+        professionals=[Professional(**p) for p in professionals_docs],
+        parent=Parent(**parent_doc) if parent_doc else None
+    )
+
+# APPOINTMENTS ROUTES
+@api_router.get("/appointments", response_model=List[Appointment])
+async def get_appointments(
+    professional_id: str = Depends(get_current_user),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None)
+):
+    """Get appointments for professional with optional date filter"""
+    query = {"professional_id": professional_id}
+    
+    if start_date and end_date:
+        start_dt = datetime.fromisoformat(start_date)
+        end_dt = datetime.fromisoformat(end_date)
+        query["start_datetime"] = {"$gte": start_dt, "$lte": end_dt}
+    
+    appointments_docs = await db.appointments.find(query, {"_id": 0}).sort("start_datetime", 1).to_list(1000)
+    return [Appointment(**apt) for apt in appointments_docs]
+
+# CONVERSATIONS ROUTES
+@api_router.get("/conversations", response_model=List[ConversationWithDetails])
+async def get_conversations(professional_id: str = Depends(get_current_user)):
+    """Get all conversations with parents"""
+    conv_docs = await db.conversations.find(
+        {"professional_id": professional_id},
+        {"_id": 0}
+    ).sort("last_message_at", -1).to_list(1000)
+    
+    result = []
+    for conv_doc in conv_docs:
+        # Get parent
+        parent_doc = await db.parents.find_one({"id": conv_doc["parent_id"]}, {"_id": 0})
+        # Get child
+        child_doc = await db.children.find_one({"id": conv_doc["child_id"]}, {"_id": 0})
+        # Get last message
+        last_msg_doc = await db.messages.find_one(
+            {"conversation_id": conv_doc["id"]},
+            {"_id": 0},
+            sort=[("created_at", -1)]
+        )
+        # Count unread messages
+        unread_count = await db.messages.count_documents({
+            "conversation_id": conv_doc["id"],
+            "sender_type": "parent",
+            "read_at": None
+        })
+        
+        result.append(ConversationWithDetails(
+            conversation=Conversation(**conv_doc),
+            parent=Parent(**parent_doc) if parent_doc else None,
+            child=Child(**child_doc) if child_doc else None,
+            last_message=Message(**last_msg_doc) if last_msg_doc else None,
+            unread_count=unread_count
+        ))
+    
+    return result
+
+@api_router.get("/conversations/{conversation_id}/messages", response_model=List[Message])
+async def get_conversation_messages(
+    conversation_id: str,
+    professional_id: str = Depends(get_current_user)
+):
+    """Get messages for a conversation"""
+    # Verify access
+    conv = await db.conversations.find_one({
+        "id": conversation_id,
+        "professional_id": professional_id
+    })
+    if not conv:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+    
+    messages_docs = await db.messages.find(
+        {"conversation_id": conversation_id},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(1000)
+    
+    return [Message(**msg) for msg in messages_docs]
+
+@api_router.post("/conversations/{conversation_id}/messages", response_model=Message)
+async def send_message(
+    conversation_id: str,
+    content: str,
+    professional_id: str = Depends(get_current_user)
+):
+    """Send a message in a conversation"""
+    # Verify access
+    conv = await db.conversations.find_one({
+        "id": conversation_id,
+        "professional_id": professional_id
+    })
+    if not conv:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+    
+    # Create message
+    message = Message(
+        id=str(uuid.uuid4()),
+        conversation_id=conversation_id,
+        sender_type=MessageSenderType.PROFESSIONAL,
+        sender_id=professional_id,
+        content=content,
+        has_attachment=False,
+        created_at=datetime.now(timezone.utc),
+        read_at=None
+    )
+    
+    # Insert message
+    await db.messages.insert_one(message.model_dump())
+    
+    # Update conversation last_message_at
+    await db.conversations.update_one(
+        {"id": conversation_id},
+        {"$set": {"last_message_at": message.created_at}}
+    )
+    
+    return message
+
+# PROFESSIONAL CONVERSATIONS ROUTES
+@api_router.get("/professional-conversations", response_model=List[ProfessionalConversationWithDetails])
+async def get_professional_conversations(professional_id: str = Depends(get_current_user)):
+    """Get all conversations with other professionals"""
+    conv_docs = await db.professional_conversations.find(
+        {"$or": [{"professional_1_id": professional_id}, {"professional_2_id": professional_id}]},
+        {"_id": 0}
+    ).sort("last_message_at", -1).to_list(1000)
+    
+    result = []
+    for conv_doc in conv_docs:
+        # Determine other professional
+        other_pro_id = conv_doc["professional_2_id"] if conv_doc["professional_1_id"] == professional_id else conv_doc["professional_1_id"]
+        
+        # Get other professional
+        other_pro_doc = await db.professionals.find_one({"id": other_pro_id}, {"_id": 0, "password_hash": 0})
+        # Get child
+        child_doc = await db.children.find_one({"id": conv_doc["child_id"]}, {"_id": 0})
+        # Get last message
+        last_msg_doc = await db.professional_messages.find_one(
+            {"professional_conversation_id": conv_doc["id"]},
+            {"_id": 0},
+            sort=[("created_at", -1)]
+        )
+        # Count unread messages
+        unread_count = await db.professional_messages.count_documents({
+            "professional_conversation_id": conv_doc["id"],
+            "sender_professional_id": {"$ne": professional_id},
+            "read_at": None
+        })
+        
+        result.append(ProfessionalConversationWithDetails(
+            conversation=ProfessionalConversation(**conv_doc),
+            other_professional=Professional(**other_pro_doc) if other_pro_doc else None,
+            child=Child(**child_doc) if child_doc else None,
+            last_message=ProfessionalMessage(**last_msg_doc) if last_msg_doc else None,
+            unread_count=unread_count
+        ))
+    
+    return result
+
+@api_router.get("/professional-conversations/{conversation_id}/messages", response_model=List[ProfessionalMessage])
+async def get_professional_conversation_messages(
+    conversation_id: str,
+    professional_id: str = Depends(get_current_user)
+):
+    """Get messages for a professional conversation"""
+    # Verify access
+    conv = await db.professional_conversations.find_one({
+        "id": conversation_id,
+        "$or": [{"professional_1_id": professional_id}, {"professional_2_id": professional_id}]
+    })
+    if not conv:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+    
+    messages_docs = await db.professional_messages.find(
+        {"professional_conversation_id": conversation_id},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(1000)
+    
+    return [ProfessionalMessage(**msg) for msg in messages_docs]
+
+# DOCUMENTS ROUTES
+@api_router.get("/documents", response_model=List[Document])
+async def get_documents(
+    professional_id: str = Depends(get_current_user),
+    child_id: Optional[str] = Query(None)
+):
+    """Get documents, optionally filtered by child"""
+    # Get children IDs the professional has access to
+    links = await db.child_professional_links.find(
+        {"professional_id": professional_id, "active": True},
+        {"_id": 0}
+    ).to_list(1000)
+    child_ids = [link["child_id"] for link in links]
+    
+    query = {"child_id": {"$in": child_ids}}
+    if child_id:
+        if child_id not in child_ids:
+            raise HTTPException(status_code=403, detail="Accès non autorisé")
+        query["child_id"] = child_id
+    
+    docs = await db.documents.find(query, {"_id": 0}).sort("uploaded_at", -1).to_list(1000)
+    return [Document(**doc) for doc in docs]
+
+# INVOICES ROUTES
+@api_router.get("/invoices", response_model=List[Invoice])
+async def get_invoices(
+    professional_id: str = Depends(get_current_user),
+    status_filter: Optional[str] = Query(None)
+):
+    """Get invoices for professional"""
+    query = {"professional_id": professional_id}
+    if status_filter:
+        query["status"] = status_filter
+    
+    invoices_docs = await db.invoices.find(query, {"_id": 0}).sort("issue_date", -1).to_list(1000)
+    return [Invoice(**inv) for inv in invoices_docs]
+
+@api_router.get("/invoices/{invoice_id}", response_model=Invoice)
+async def get_invoice(invoice_id: str, professional_id: str = Depends(get_current_user)):
+    """Get invoice details"""
+    invoice_doc = await db.invoices.find_one({
+        "id": invoice_id,
+        "professional_id": professional_id
+    }, {"_id": 0})
+    
+    if not invoice_doc:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    
+    return Invoice(**invoice_doc)
+
+@api_router.patch("/invoices/{invoice_id}/status")
+async def update_invoice_status(
+    invoice_id: str,
+    status: InvoiceStatus,
+    amount_paid: Optional[float] = None,
+    payment_method: Optional[str] = None,
+    professional_id: str = Depends(get_current_user)
+):
+    """Update invoice status and payment info"""
+    invoice_doc = await db.invoices.find_one({
+        "id": invoice_id,
+        "professional_id": professional_id
+    }, {"_id": 0})
+    
+    if not invoice_doc:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    
+    update_data = {"status": status.value}
+    
+    if status == InvoiceStatus.PAID and amount_paid is not None:
+        update_data["amount_paid"] = amount_paid
+        update_data["amount_remaining"] = 0.0
+        update_data["payment_date"] = date.today()
+        if payment_method:
+            update_data["payment_method"] = payment_method
+    elif status == InvoiceStatus.PARTIALLY_PAID and amount_paid is not None:
+        total = invoice_doc["amount_total"]
+        update_data["amount_paid"] = amount_paid
+        update_data["amount_remaining"] = total - amount_paid
+        update_data["last_partial_payment_date"] = date.today()
+        if payment_method:
+            update_data["payment_method"] = payment_method
+    
+    await db.invoices.update_one({"id": invoice_id}, {"$set": update_data})
+    
+    return {"message": "Statut mis à jour"}
+
+# DASHBOARD ROUTE
+@api_router.get("/dashboard/stats", response_model=DashboardStats)
+async def get_dashboard_stats(professional_id: str = Depends(get_current_user)):
+    """Get dashboard statistics and data"""
+    
+    # Get upcoming appointments (next 7 days)
+    now = datetime.now(timezone.utc)
+    end_date = now + timedelta(days=7)
+    appointments_docs = await db.appointments.find({
+        "professional_id": professional_id,
+        "start_datetime": {"$gte": now, "$lte": end_date},
+        "status": "planifie"
+    }, {"_id": 0}).sort("start_datetime", 1).limit(5).to_list(1000)
+    
+    # Get children IDs
+    links = await db.child_professional_links.find(
+        {"professional_id": professional_id, "active": True},
+        {"_id": 0}
+    ).to_list(1000)
+    child_ids = [link["child_id"] for link in links]
+    
+    # Get recent children (limit 4)
+    children_docs = await db.children.find(
+        {"id": {"$in": child_ids}},
+        {"_id": 0}
+    ).limit(4).to_list(1000)
+    
+    # Get recent conversations (limit 3)
+    conv_docs = await db.conversations.find(
+        {"professional_id": professional_id},
+        {"_id": 0}
+    ).sort("last_message_at", -1).limit(3).to_list(1000)
+    
+    recent_conversations = []
+    for conv_doc in conv_docs:
+        parent_doc = await db.parents.find_one({"id": conv_doc["parent_id"]}, {"_id": 0})
+        child_doc = await db.children.find_one({"id": conv_doc["child_id"]}, {"_id": 0})
+        last_msg_doc = await db.messages.find_one(
+            {"conversation_id": conv_doc["id"]},
+            {"_id": 0},
+            sort=[("created_at", -1)]
+        )
+        unread_count = await db.messages.count_documents({
+            "conversation_id": conv_doc["id"],
+            "sender_type": "parent",
+            "read_at": None
+        })
+        
+        recent_conversations.append(ConversationWithDetails(
+            conversation=Conversation(**conv_doc),
+            parent=Parent(**parent_doc) if parent_doc else None,
+            child=Child(**child_doc) if child_doc else None,
+            last_message=Message(**last_msg_doc) if last_msg_doc else None,
+            unread_count=unread_count
+        ))
+    
+    # Get recent documents (limit 4)
+    docs = await db.documents.find(
+        {"child_id": {"$in": child_ids}},
+        {"_id": 0}
+    ).sort("uploaded_at", -1).limit(4).to_list(1000)
+    
+    # Get recent invoices (limit 5)
+    invoices_docs = await db.invoices.find(
+        {"professional_id": professional_id},
+        {"_id": 0}
+    ).sort("issue_date", -1).limit(5).to_list(1000)
+    
+    # Count pending and overdue invoices
+    pending_count = await db.invoices.count_documents({
+        "professional_id": professional_id,
+        "status": "en_attente_paiement"
+    })
+    overdue_count = await db.invoices.count_documents({
+        "professional_id": professional_id,
+        "status": "impayee"
+    })
+    
+    return DashboardStats(
+        upcoming_appointments=[Appointment(**apt) for apt in appointments_docs],
+        recent_children=[Child(**child) for child in children_docs],
+        recent_messages=recent_conversations,
+        recent_documents=[Document(**doc) for doc in docs],
+        recent_invoices=[Invoice(**inv) for inv in invoices_docs],
+        pending_invoices_count=pending_count,
+        overdue_invoices_count=overdue_count
+    )
+
+# Include router
+app.include_router(api_router)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

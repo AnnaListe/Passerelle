@@ -1,33 +1,33 @@
-import * as React from "react"
-import * as AvatarPrimitive from "@radix-ui/react-avatar"
+import React from 'react';
+import { cn, getInitials } from '../../lib/utils';
 
-import { cn } from "@/lib/utils"
+const Avatar = React.forwardRef(({ className, src, alt, firstName, lastName, size = 'default', ...props }, ref) => {
+  const sizes = {
+    sm: 'w-8 h-8 text-xs',
+    default: 'w-10 h-10 text-sm',
+    lg: 'w-12 h-12 text-base',
+    xl: 'w-16 h-16 text-lg'
+  };
 
-const Avatar = React.forwardRef(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Root
-    ref={ref}
-    className={cn("relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full", className)}
-    {...props} />
-))
-Avatar.displayName = AvatarPrimitive.Root.displayName
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        'relative inline-flex items-center justify-center rounded-full bg-primary-light text-primary font-medium overflow-hidden',
+        sizes[size],
+        className
+      )}
+      {...props}
+    >
+      {src ? (
+        <img src={src} alt={alt} className="w-full h-full object-cover" />
+      ) : (
+        <span>{getInitials(firstName, lastName)}</span>
+      )}
+    </div>
+  );
+});
 
-const AvatarImage = React.forwardRef(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Image
-    ref={ref}
-    className={cn("aspect-square h-full w-full", className)}
-    {...props} />
-))
-AvatarImage.displayName = AvatarPrimitive.Image.displayName
+Avatar.displayName = 'Avatar';
 
-const AvatarFallback = React.forwardRef(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Fallback
-    ref={ref}
-    className={cn(
-      "flex h-full w-full items-center justify-center rounded-full bg-muted",
-      className
-    )}
-    {...props} />
-))
-AvatarFallback.displayName = AvatarPrimitive.Fallback.displayName
-
-export { Avatar, AvatarImage, AvatarFallback }
+export { Avatar };
