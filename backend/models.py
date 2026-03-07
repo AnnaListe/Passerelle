@@ -317,6 +317,31 @@ class ProfessionalConversationWithDetails(BaseModel):
     last_message: Optional[ProfessionalMessage] = None
     unread_count: int = 0
 
+class BillingMode(str, Enum):
+    PER_SESSION = "par_seance"
+    HOURLY_RATE = "tarif_horaire"
+
+class Contract(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    child_id: str
+    professional_id: str
+    parent_id: str
+    start_date: date
+    end_date: Optional[date] = None
+    billing_mode: BillingMode
+    # For per session billing
+    session_price: Optional[float] = None
+    # For hourly rate billing
+    hourly_rate: Optional[float] = None
+    sessions_per_week: Optional[int] = None
+    sessions_per_month: Optional[int] = None
+    session_duration_minutes: Optional[int] = None
+    notes: Optional[str] = None
+    active: bool = True
+    created_at: datetime
+    updated_at: datetime
+
 class DashboardStats(BaseModel):
     model_config = ConfigDict(extra="ignore")
     upcoming_appointments: List[Appointment] = []

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Users, Calendar, MessageCircle, FileText, Receipt, User } from 'lucide-react';
+import { Home, Users, Calendar, MessageCircle, FileText, Receipt, User, FileSignature } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from '../ui/avatar';
@@ -12,6 +12,7 @@ const navigation = [
   { name: 'Messages', path: '/messages', icon: MessageCircle },
   { name: 'Documents', path: '/documents', icon: FileText },
   { name: 'Factures', path: '/invoices', icon: Receipt },
+  { name: 'Contrats', path: '/contracts', icon: FileSignature },
 ];
 
 const MobileNav = () => {

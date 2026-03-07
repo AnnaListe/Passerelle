@@ -65,6 +65,7 @@ async def init_demo_data():
         await db.professional_messages.insert_many(demo_data.professional_messages)
         await db.documents.insert_many(demo_data.documents)
         await db.invoices.insert_many(demo_data.invoices)
+        await db.contracts.insert_many(demo_data.contracts)
         
         logger.info("Demo data initialized successfully")
     except Exception as e:
@@ -435,20 +436,135 @@ async def update_invoice_status(
     if status == InvoiceStatus.PAID and amount_paid is not None:
         update_data["amount_paid"] = amount_paid
         update_data["amount_remaining"] = 0.0
-        update_data["payment_date"] = date.today()
+        update_data["payment_date"] = datetime.now(timezone.utc).date().isoformat()
         if payment_method:
             update_data["payment_method"] = payment_method
     elif status == InvoiceStatus.PARTIALLY_PAID and amount_paid is not None:
         total = invoice_doc["amount_total"]
         update_data["amount_paid"] = amount_paid
         update_data["amount_remaining"] = total - amount_paid
-        update_data["last_partial_payment_date"] = date.today()
+        update_data["last_partial_payment_date"] = datetime.now(timezone.utc).date().isoformat()
         if payment_method:
             update_data["payment_method"] = payment_method
     
     await db.invoices.update_one({"id": invoice_id}, {"$set": update_data})
     
     return {"message": "Statut mis à jour"}
+
+# CONTRACTS ROUTES
+@api_router.get("/contracts", response_model=List[Contract])
+async def get_contracts(
+    professional_id: str = Depends(get_current_user),
+    child_id: Optional[str] = Query(None)
+):
+    """Get contracts for professional"""
+    query = {"professional_id": professional_id}
+    if child_id:
+        query["child_id"] = child_id
+    
+    contracts_docs = await db.contracts.find(query, {"_id": 0}).to_list(1000)
+    return [Contract(**contract) for contract in contracts_docs]
+
+@api_router.get("/contracts/{contract_id}", response_model=Contract)
+async def get_contract(contract_id: str, professional_id: str = Depends(get_current_user)):
+    """Get contract details"""
+    contract_doc = await db.contracts.find_one({
+        "id": contract_id,
+        "professional_id": professional_id
+    }, {"_id": 0})
+    
+    if not contract_doc:
+        raise HTTPException(status_code=404, detail="Contrat non trouvé")
+    
+    return Contract(**contract_doc)
+
+@api_router.post("/contracts", response_model=Contract)
+async def create_contract(
+    child_id: str,
+    parent_id: str,
+    start_date: str,
+    billing_mode: str,
+    session_price: Optional[float] = None,
+    hourly_rate: Optional[float] = None,
+    sessions_per_week: Optional[int] = None,
+    sessions_per_month: Optional[int] = None,
+    session_duration_minutes: Optional[int] = None,
+    notes: Optional[str] = None,
+    professional_id: str = Depends(get_current_user)
+):
+    """Create a new contract"""
+    contract = Contract(
+        id=str(uuid.uuid4()),
+        child_id=child_id,
+        professional_id=professional_id,
+        parent_id=parent_id,
+        start_date=start_date,
+        end_date=None,
+        billing_mode=billing_mode,
+        session_price=session_price,
+        hourly_rate=hourly_rate,
+        sessions_per_week=sessions_per_week,
+        sessions_per_month=sessions_per_month,
+        session_duration_minutes=session_duration_minutes,
+        notes=notes,
+        active=True,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    
+    await db.contracts.insert_one(contract.model_dump())
+    return contract
+
+@api_router.put("/contracts/{contract_id}", response_model=Contract)
+async def update_contract(
+    contract_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    billing_mode: Optional[str] = None,
+    session_price: Optional[float] = None,
+    hourly_rate: Optional[float] = None,
+    sessions_per_week: Optional[int] = None,
+    sessions_per_month: Optional[int] = None,
+    session_duration_minutes: Optional[int] = None,
+    notes: Optional[str] = None,
+    active: Optional[bool] = None,
+    professional_id: str = Depends(get_current_user)
+):
+    """Update a contract"""
+    contract_doc = await db.contracts.find_one({
+        "id": contract_id,
+        "professional_id": professional_id
+    }, {"_id": 0})
+    
+    if not contract_doc:
+        raise HTTPException(status_code=404, detail="Contrat non trouvé")
+    
+    update_data = {"updated_at": datetime.now(timezone.utc)}
+    if start_date is not None:
+        update_data["start_date"] = start_date
+    if end_date is not None:
+        update_data["end_date"] = end_date
+    if billing_mode is not None:
+        update_data["billing_mode"] = billing_mode
+    if session_price is not None:
+        update_data["session_price"] = session_price
+    if hourly_rate is not None:
+        update_data["hourly_rate"] = hourly_rate
+    if sessions_per_week is not None:
+        update_data["sessions_per_week"] = sessions_per_week
+    if sessions_per_month is not None:
+        update_data["sessions_per_month"] = sessions_per_month
+    if session_duration_minutes is not None:
+        update_data["session_duration_minutes"] = session_duration_minutes
+    if notes is not None:
+        update_data["notes"] = notes
+    if active is not None:
+        update_data["active"] = active
+    
+    await db.contracts.update_one({"id": contract_id}, {"$set": update_data})
+    
+    updated_doc = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
+    return Contract(**updated_doc)
 
 # DASHBOARD ROUTE
 @api_router.get("/dashboard/stats", response_model=DashboardStats)

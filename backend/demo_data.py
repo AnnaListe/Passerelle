@@ -846,3 +846,61 @@ invoices = [
         "created_at": datetime.now(timezone.utc) - timedelta(days=45)
     }
 ]
+
+# Contracts
+contracts = [
+    {
+        "id": "contract-lucas-001",
+        "child_id": "child-lucas-martin",
+        "professional_id": CURRENT_PROFESSIONAL_ID,
+        "parent_id": "parent-claire-martin",
+        "start_date": (datetime.now(timezone.utc) - timedelta(days=90)).date().isoformat(),
+        "end_date": None,
+        "billing_mode": "par_seance",
+        "session_price": 60.0,
+        "hourly_rate": None,
+        "sessions_per_week": None,
+        "sessions_per_month": None,
+        "session_duration_minutes": None,
+        "notes": "Séances d'éducation spécialisée - 3 fois par semaine",
+        "active": True,
+        "created_at": datetime.now(timezone.utc) - timedelta(days=90),
+        "updated_at": datetime.now(timezone.utc) - timedelta(days=90)
+    },
+    {
+        "id": "contract-emma-001",
+        "child_id": "child-emma-petit",
+        "professional_id": CURRENT_PROFESSIONAL_ID,
+        "parent_id": "parent-julie-petit",
+        "start_date": (datetime.now(timezone.utc) - timedelta(days=60)).date().isoformat(),
+        "end_date": None,
+        "billing_mode": "tarif_horaire",
+        "session_price": None,
+        "hourly_rate": 40.0,
+        "sessions_per_week": 2,
+        "sessions_per_month": 8,
+        "session_duration_minutes": 90,
+        "notes": "Séances d'éducation spécialisée - 2 fois par semaine, 1h30 par séance",
+        "active": True,
+        "created_at": datetime.now(timezone.utc) - timedelta(days=60),
+        "updated_at": datetime.now(timezone.utc) - timedelta(days=60)
+    },
+    {
+        "id": "contract-noah-001",
+        "child_id": "child-noah-rousseau",
+        "professional_id": CURRENT_PROFESSIONAL_ID,
+        "parent_id": "parent-david-rousseau",
+        "start_date": (datetime.now(timezone.utc) - timedelta(days=120)).date().isoformat(),
+        "end_date": None,
+        "billing_mode": "par_seance",
+        "session_price": 60.0,
+        "hourly_rate": None,
+        "sessions_per_week": None,
+        "sessions_per_month": None,
+        "session_duration_minutes": None,
+        "notes": "Séances d'éducation spécialisée - 3 fois par semaine",
+        "active": True,
+        "created_at": datetime.now(timezone.utc) - timedelta(days=120),
+        "updated_at": datetime.now(timezone.utc) - timedelta(days=120)
+    }
+]

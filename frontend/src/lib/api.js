@@ -70,4 +70,11 @@ export const dashboardAPI = {
   stats: () => api.get('/dashboard/stats'),
 };
 
+export const contractsAPI = {
+  list: (params) => api.get('/contracts', { params }),
+  detail: (contractId) => api.get(`/contracts/${contractId}`),
+  create: (data) => api.post('/contracts', data),
+  update: (contractId, data) => api.put(`/contracts/${contractId}`, data),
+};
+
 export default api;

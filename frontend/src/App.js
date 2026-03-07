@@ -13,6 +13,7 @@ import ConversationDetail from './pages/ConversationDetail';
 import Documents from './pages/Documents';
 import Invoices from './pages/Invoices';
 import InvoiceDetail from './pages/InvoiceDetail';
+import Contracts from './pages/Contracts';
 import Profile from './pages/Profile';
 import './App.css';
 
@@ -44,6 +45,8 @@ function App() {
             <Route path="documents" element={<Documents />} />
             <Route path="invoices" element={<Invoices />} />
             <Route path="invoices/:invoiceId" element={<InvoiceDetail />} />
+            <Route path="contracts" element={<Contracts />} />
+            <Route path="contracts/:childId" element={<Contracts />} />
             <Route path="profile" element={<Profile />} />
           </Route>
 

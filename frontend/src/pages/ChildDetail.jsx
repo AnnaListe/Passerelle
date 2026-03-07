@@ -96,6 +96,11 @@ const ChildDetail = () => {
                     Planning
                   </Button>
                 </Link>
+                <Link to={`/contracts/${childId}`}>
+                  <Button variant="outline" size="sm" data-testid="view-contract-button">
+                    Contrat
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>
@@ -463,31 +468,56 @@ const ChildDetail = () => {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {child.professionals?.map((pro) => (
-                <div 
-                  key={pro.id}
-                  className="flex items-start gap-3 p-3 bg-background-subtle rounded-lg"
-                  data-testid={`professional-${pro.id}`}
-                >
-                  <Avatar 
-                    src={pro.avatar_url} 
-                    firstName={pro.first_name} 
-                    lastName={pro.last_name}
-                    size="default"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-700">
-                      {pro.first_name} {pro.last_name}
-                    </p>
-                    <p className="text-xs text-foreground-muted">{pro.profession}</p>
-                    {pro.has_passerelle_account ? (
-                      <Badge variant="success" className="mt-2 text-xs">Sur Passerelle</Badge>
-                    ) : (
-                      <Badge variant="default" className="mt-2 text-xs">Hors plateforme</Badge>
-                    )}
+              {child.professionals && child.professionals.length > 0 ? (
+                child.professionals.map((pro) => (
+                  <div 
+                    key={pro.id}
+                    className="p-3 bg-background-subtle rounded-lg"
+                    data-testid={`professional-${pro.id}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Avatar 
+                        src={pro.avatar_url} 
+                        firstName={pro.first_name} 
+                        lastName={pro.last_name}
+                        size="default"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-700">
+                          {pro.first_name} {pro.last_name}
+                        </p>
+                        <p className="text-xs text-foreground-muted">{pro.profession}</p>
+                        {pro.specialty && (
+                          <p className="text-xs text-foreground-muted">{pro.specialty}</p>
+                        )}
+                        <div className="mt-2 flex items-center gap-2">
+                          {pro.has_passerelle_account ? (
+                            <>
+                              <Badge variant="success" className="text-xs">
+                                Sur Passerelle
+                              </Badge>
+                              <Link to="/messages">
+                                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                                  <MessageCircle className="w-3 h-3 mr-1" />
+                                  Contacter
+                                </Button>
+                              </Link>
+                            </>
+                          ) : (
+                            <Badge variant="default" className="text-xs">
+                              Hors plateforme
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-foreground-muted text-center py-4">
+                  Aucun autre professionnel enregistré
+                </p>
+              )}
             </CardContent>
           </Card>
 
