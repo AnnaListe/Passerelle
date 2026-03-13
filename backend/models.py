@@ -321,12 +321,43 @@ class BillingMode(str, Enum):
     PER_SESSION = "par_seance"
     HOURLY_RATE = "tarif_horaire"
 
+class QuoteStatus(str, Enum):
+    DRAFT = "brouillon"
+    SENT = "envoye"
+    ACCEPTED = "accepte"
+    REFUSED = "refuse"
+
+class Quote(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    child_id: str
+    professional_id: str
+    parent_id: str
+    quote_number: str
+    issue_date: date
+    validity_date: Optional[date] = None
+    billing_mode: BillingMode
+    # For per session billing
+    session_price: Optional[float] = None
+    # For hourly rate billing
+    hourly_rate: Optional[float] = None
+    sessions_per_week: Optional[int] = None
+    sessions_per_month: Optional[int] = None
+    session_duration_minutes: Optional[int] = None
+    estimated_monthly_amount: float
+    description: Optional[str] = None
+    status: QuoteStatus = QuoteStatus.DRAFT
+    converted_to_contract_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
 class Contract(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
     child_id: str
     professional_id: str
     parent_id: str
+    quote_id: Optional[str] = None
     start_date: date
     end_date: Optional[date] = None
     billing_mode: BillingMode

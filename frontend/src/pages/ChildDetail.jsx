@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { childrenAPI } from '../lib/api';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { childrenAPI, conversationsAPI } from '../lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Avatar } from '../components/ui/avatar';
@@ -13,6 +13,7 @@ import { formatDate } from '../lib/utils';
 
 const ChildDetail = () => {
   const { childId } = useParams();
+  const navigate = useNavigate();
   const [child, setChild] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -28,6 +29,25 @@ const ChildDetail = () => {
       console.error('Error loading child:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMessageParent = async () => {
+    try {
+      // Get conversations list
+      const conversationsRes = await conversationsAPI.list();
+      // Find conversation for this child
+      const conversation = conversationsRes.data.find(conv => conv.conversation.child_id === childId);
+      
+      if (conversation) {
+        navigate(`/messages/parent/${conversation.conversation.id}`);
+      } else {
+        // If no conversation exists, redirect to messages page
+        navigate('/messages');
+      }
+    } catch (error) {
+      console.error('Error finding conversation:', error);
+      navigate('/messages');
     }
   };
 
@@ -84,12 +104,10 @@ const ChildDetail = () => {
                 <span>Né(e) le {formatDate(child.child.birth_date)}</span>
               </div>
               <div className="flex gap-3 mt-4">
-                <Link to={`/messages`}>
-                  <Button size="sm" data-testid="message-parent-button">
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    Message parent
-                  </Button>
-                </Link>
+                <Button size="sm" onClick={handleMessageParent} data-testid="message-parent-button">
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Message parent
+                </Button>
                 <Link to={`/planning?child=${childId}`}>
                   <Button variant="secondary" size="sm" data-testid="view-schedule-button">
                     <Calendar className="w-4 h-4 mr-2" />

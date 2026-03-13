@@ -66,6 +66,7 @@ async def init_demo_data():
         await db.documents.insert_many(demo_data.documents)
         await db.invoices.insert_many(demo_data.invoices)
         await db.contracts.insert_many(demo_data.contracts)
+        await db.quotes.insert_many(demo_data.quotes)
         
         logger.info("Demo data initialized successfully")
     except Exception as e:
@@ -116,6 +117,36 @@ async def get_professional(professional_id: str, current_user_id: str = Depends(
     if not pro_doc:
         raise HTTPException(status_code=404, detail="Professionnel non trouvé")
     return Professional(**pro_doc)
+
+@api_router.put("/professionals/me")
+async def update_professional_profile(
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    profession: Optional[str] = None,
+    specialty: Optional[str] = None,
+    phone: Optional[str] = None,
+    description: Optional[str] = None,
+    professional_id: str = Depends(get_current_user)
+):
+    """Update professional profile"""
+    update_data = {"updated_at": datetime.now(timezone.utc)}
+    if first_name is not None:
+        update_data["first_name"] = first_name
+    if last_name is not None:
+        update_data["last_name"] = last_name
+    if profession is not None:
+        update_data["profession"] = profession
+    if specialty is not None:
+        update_data["specialty"] = specialty
+    if phone is not None:
+        update_data["phone"] = phone
+    if description is not None:
+        update_data["description"] = description
+    
+    await db.professionals.update_one({"id": professional_id}, {"$set": update_data})
+    
+    updated_doc = await db.professionals.find_one({"id": professional_id}, {"_id": 0, "password_hash": 0})
+    return Professional(**updated_doc)
 
 # CHILDREN ROUTES
 @api_router.get("/children", response_model=List[Child])
@@ -565,6 +596,159 @@ async def update_contract(
     
     updated_doc = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
     return Contract(**updated_doc)
+
+# QUOTES ROUTES
+@api_router.get("/quotes", response_model=List[Quote])
+async def get_quotes(
+    professional_id: str = Depends(get_current_user),
+    child_id: Optional[str] = Query(None)
+):
+    """Get quotes for professional"""
+    query = {"professional_id": professional_id}
+    if child_id:
+        query["child_id"] = child_id
+    
+    quotes_docs = await db.quotes.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return [Quote(**quote) for quote in quotes_docs]
+
+@api_router.get("/quotes/{quote_id}", response_model=Quote)
+async def get_quote(quote_id: str, professional_id: str = Depends(get_current_user)):
+    """Get quote details"""
+    quote_doc = await db.quotes.find_one({
+        "id": quote_id,
+        "professional_id": professional_id
+    }, {"_id": 0})
+    
+    if not quote_doc:
+        raise HTTPException(status_code=404, detail="Devis non trouvé")
+    
+    return Quote(**quote_doc)
+
+@api_router.post("/quotes", response_model=Quote)
+async def create_quote(
+    child_id: str,
+    parent_id: str,
+    billing_mode: str,
+    session_price: Optional[float] = None,
+    hourly_rate: Optional[float] = None,
+    sessions_per_week: Optional[int] = None,
+    sessions_per_month: Optional[int] = None,
+    session_duration_minutes: Optional[int] = None,
+    description: Optional[str] = None,
+    validity_days: int = 30,
+    professional_id: str = Depends(get_current_user)
+):
+    """Create a new quote"""
+    # Calculate estimated monthly amount
+    estimated_amount = 0.0
+    if billing_mode == "par_seance" and session_price:
+        estimated_amount = session_price * (sessions_per_month or 12)
+    elif billing_mode == "tarif_horaire" and hourly_rate and sessions_per_month and session_duration_minutes:
+        hours = session_duration_minutes / 60
+        estimated_amount = hourly_rate * hours * sessions_per_month
+    
+    # Generate quote number
+    count = await db.quotes.count_documents({"professional_id": professional_id})
+    quote_number = f"DEV-{datetime.now(timezone.utc).year}-{str(count + 1).zfill(3)}"
+    
+    issue_date = datetime.now(timezone.utc).date()
+    validity_date = (datetime.now(timezone.utc) + timedelta(days=validity_days)).date()
+    
+    quote = Quote(
+        id=str(uuid.uuid4()),
+        child_id=child_id,
+        professional_id=professional_id,
+        parent_id=parent_id,
+        quote_number=quote_number,
+        issue_date=issue_date.isoformat(),
+        validity_date=validity_date.isoformat(),
+        billing_mode=billing_mode,
+        session_price=session_price,
+        hourly_rate=hourly_rate,
+        sessions_per_week=sessions_per_week,
+        sessions_per_month=sessions_per_month,
+        session_duration_minutes=session_duration_minutes,
+        estimated_monthly_amount=estimated_amount,
+        description=description,
+        status=QuoteStatus.DRAFT,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    
+    await db.quotes.insert_one(quote.model_dump())
+    return quote
+
+@api_router.patch("/quotes/{quote_id}/status")
+async def update_quote_status(
+    quote_id: str,
+    status: QuoteStatus,
+    professional_id: str = Depends(get_current_user)
+):
+    """Update quote status"""
+    quote_doc = await db.quotes.find_one({
+        "id": quote_id,
+        "professional_id": professional_id
+    }, {"_id": 0})
+    
+    if not quote_doc:
+        raise HTTPException(status_code=404, detail="Devis non trouvé")
+    
+    await db.quotes.update_one(
+        {"id": quote_id},
+        {"$set": {"status": status.value, "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    return {"message": "Statut mis à jour"}
+
+@api_router.post("/quotes/{quote_id}/convert-to-contract", response_model=Contract)
+async def convert_quote_to_contract(
+    quote_id: str,
+    start_date: str,
+    notes: Optional[str] = None,
+    professional_id: str = Depends(get_current_user)
+):
+    """Convert a quote to a contract"""
+    quote_doc = await db.quotes.find_one({
+        "id": quote_id,
+        "professional_id": professional_id
+    }, {"_id": 0})
+    
+    if not quote_doc:
+        raise HTTPException(status_code=404, detail="Devis non trouvé")
+    
+    if quote_doc["status"] != "accepte":
+        raise HTTPException(status_code=400, detail="Le devis doit être accepté avant conversion")
+    
+    # Create contract from quote
+    contract = Contract(
+        id=str(uuid.uuid4()),
+        child_id=quote_doc["child_id"],
+        professional_id=quote_doc["professional_id"],
+        parent_id=quote_doc["parent_id"],
+        quote_id=quote_id,
+        start_date=start_date,
+        end_date=None,
+        billing_mode=quote_doc["billing_mode"],
+        session_price=quote_doc.get("session_price"),
+        hourly_rate=quote_doc.get("hourly_rate"),
+        sessions_per_week=quote_doc.get("sessions_per_week"),
+        sessions_per_month=quote_doc.get("sessions_per_month"),
+        session_duration_minutes=quote_doc.get("session_duration_minutes"),
+        notes=notes,
+        active=True,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    
+    await db.contracts.insert_one(contract.model_dump())
+    
+    # Update quote to mark as converted
+    await db.quotes.update_one(
+        {"id": quote_id},
+        {"$set": {"converted_to_contract_id": contract.id, "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    return contract
 
 # DASHBOARD ROUTE
 @api_router.get("/dashboard/stats", response_model=DashboardStats)

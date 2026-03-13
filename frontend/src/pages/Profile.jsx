@@ -1,9 +1,10 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Avatar } from '../components/ui/avatar';
-import { User, Mail, Phone, Briefcase, LogOut } from 'lucide-react';
+import { User, Mail, Phone, Briefcase, LogOut, Settings } from 'lucide-react';
 
 const Profile = () => {
   const { user, logout } = useAuth();
@@ -88,9 +89,15 @@ const Profile = () => {
               <CardTitle className="text-lg">Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <Link to="/profile/settings">
+                <Button variant="secondary" className="w-full justify-start">
+                  <Settings className="w-4 h-4 mr-2" />
+                  Configurer mon compte
+                </Button>
+              </Link>
               <Button 
                 variant="danger"
-                className="w-full"
+                className="w-full justify-start"
                 onClick={logout}
                 data-testid="logout-button"
               >

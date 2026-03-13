@@ -15,6 +15,7 @@ import Invoices from './pages/Invoices';
 import InvoiceDetail from './pages/InvoiceDetail';
 import Contracts from './pages/Contracts';
 import Profile from './pages/Profile';
+import ProfileSettings from './pages/ProfileSettings';
 import './App.css';
 
 function App() {
@@ -48,6 +49,7 @@ function App() {
             <Route path="contracts" element={<Contracts />} />
             <Route path="contracts/:childId" element={<Contracts />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="profile/settings" element={<ProfileSettings />} />
           </Route>
 
           {/* Fallback */}

@@ -77,4 +77,16 @@ export const contractsAPI = {
   update: (contractId, data) => api.put(`/contracts/${contractId}`, data),
 };
 
+export const quotesAPI = {
+  list: (params) => api.get('/quotes', { params }),
+  detail: (quoteId) => api.get(`/quotes/${quoteId}`),
+  create: (data) => api.post('/quotes', data),
+  updateStatus: (quoteId, status) => api.patch(`/quotes/${quoteId}/status`, null, { params: { status } }),
+  convertToContract: (quoteId, data) => api.post(`/quotes/${quoteId}/convert-to-contract`, data),
+};
+
+export const profileAPI = {
+  update: (data) => api.put('/professionals/me', data),
+};
+
 export default api;

@@ -904,3 +904,30 @@ contracts = [
         "updated_at": datetime.now(timezone.utc) - timedelta(days=120)
     }
 ]
+
+
+# Quotes
+quotes = [
+    {
+        "id": "quote-001",
+        "child_id": "child-lea-blanc",
+        "professional_id": CURRENT_PROFESSIONAL_ID,
+        "parent_id": "parent-laura-blanc",
+        "quote_number": "DEV-2025-001",
+        "issue_date": datetime.now(timezone.utc).date().isoformat(),
+        "validity_date": (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat(),
+        "billing_mode": "par_seance",
+        "session_price": 60.0,
+        "hourly_rate": None,
+        "sessions_per_week": None,
+        "sessions_per_month": 8,
+        "session_duration_minutes": None,
+        "estimated_monthly_amount": 480.0,
+        "description": "Devis pour accompagnement éducatif - 2 séances par semaine",
+        "status": "envoye",
+        "converted_to_contract_id": None,
+        "created_at": datetime.now(timezone.utc) - timedelta(days=5),
+        "updated_at": datetime.now(timezone.utc) - timedelta(days=5)
+    }
+]
+
