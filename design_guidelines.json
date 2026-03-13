@@ -1,0 +1,216 @@
+{
+  "brand_identity": {
+    "name": "Passerelle",
+    "mission": "Simplifier la coordination autour de l'enfant avec TSA pour les professionnels libéraux.",
+    "tone": {
+      "primary": "Rassurant",
+      "secondary": "Professionnel",
+      "tertiary": "Fluide"
+    },
+    "archetype": "The Nurturing Guide (Soft, Organized, Empathetic)"
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Outfit, sans-serif",
+      "body": "DM Sans, sans-serif"
+    },
+    "scale": {
+      "h1": "text-4xl md:text-5xl font-bold tracking-tight text-slate-800",
+      "h2": "text-3xl md:text-4xl font-semibold tracking-tight text-slate-800",
+      "h3": "text-2xl font-semibold text-slate-700",
+      "h4": "text-xl font-medium text-slate-700",
+      "body_lg": "text-lg leading-relaxed text-slate-600",
+      "body_base": "text-base leading-relaxed text-slate-600",
+      "body_sm": "text-sm text-slate-500",
+      "caption": "text-xs font-medium tracking-wide text-slate-400 uppercase"
+    },
+    "weights": {
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    },
+    "instructions": "Import 'Outfit' and 'DM Sans' from Google Fonts. Use Outfit for all Headings (h1-h4) and DM Sans for body text."
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "DEFAULT": "#5D9B89",
+        "foreground": "#FFFFFF",
+        "hover": "#4A8275",
+        "light": "#E0F2EE"
+      },
+      "secondary": {
+        "DEFAULT": "#9F9FED",
+        "foreground": "#FFFFFF",
+        "light": "#E6E6FA",
+        "hover": "#8B8BD9"
+      },
+      "background": {
+        "DEFAULT": "#FAFAF9",
+        "paper": "#FFFFFF",
+        "subtle": "#F5F5F4"
+      },
+      "foreground": {
+        "DEFAULT": "#334155",
+        "muted": "#64748B",
+        "light": "#94A3B8"
+      },
+      "accent": {
+        "DEFAULT": "#F28F8F",
+        "foreground": "#FFFFFF",
+        "yellow": "#FDE68A",
+        "blue": "#BFDBFE"
+      },
+      "border": "#E7E5E4",
+      "input": "#F5F5F4"
+    },
+    "semantic": {
+      "success": "#86EFAC",
+      "warning": "#FCD34D",
+      "error": "#FDA4AF",
+      "info": "#93C5FD"
+    },
+    "gradients": {
+      "hero": "bg-gradient-to-br from-[#FAFAF9] to-[#E0F2EE]",
+      "card_hover": "bg-gradient-to-br from-white to-[#F5F5F4]"
+    },
+    "instructions": "Add these custom colors to tailwind.config.js using CSS variables or hex values. Do NOT use default colors."
+  },
+  "layout": {
+    "spacing": {
+      "container_padding": "p-4 md:p-8 lg:p-12",
+      "section_gap": "gap-8 md:gap-12",
+      "element_gap": "gap-4"
+    },
+    "grid_system": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
+      "card_list": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6",
+      "detail_view": "grid grid-cols-1 lg:grid-cols-12 gap-8"
+    },
+    "container": {
+      "max_width": "max-w-7xl mx-auto",
+      "mobile_padding": "px-4",
+      "desktop_padding": "px-8"
+    },
+    "radius": {
+      "default": "rounded-2xl",
+      "card": "rounded-2xl",
+      "button": "rounded-full",
+      "input": "rounded-xl"
+    },
+    "shadows": {
+      "card": "shadow-[0_2px_8px_rgba(0,0,0,0.04)]",
+      "card_hover": "shadow-[0_8px_24px_rgba(0,0,0,0.08)]",
+      "float": "shadow-[0_12px_32px_rgba(93,155,137,0.15)]"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#5D9B89] text-white hover:bg-[#4A8275] rounded-full px-6 py-2.5 font-medium transition-all duration-200 active:scale-95 shadow-sm hover:shadow-md",
+      "secondary": "bg-[#E0F2EE] text-[#4A8275] hover:bg-[#D1E8E2] rounded-full px-6 py-2.5 font-medium transition-all duration-200",
+      "outline": "border-2 border-[#E7E5E4] text-slate-600 hover:border-[#5D9B89] hover:text-[#5D9B89] bg-transparent rounded-full px-6 py-2.5 font-medium transition-all",
+      "ghost": "text-slate-500 hover:text-[#5D9B89] hover:bg-[#F5F5F4] rounded-lg px-4 py-2 transition-colors",
+      "danger": "bg-red-50 text-red-600 hover:bg-red-100 rounded-full px-6 py-2.5 font-medium transition-colors"
+    },
+    "cards": {
+      "base": "bg-white rounded-2xl border border-[#E7E5E4] p-6 transition-all duration-300",
+      "interactive": "bg-white rounded-2xl border border-[#E7E5E4] p-6 hover:border-[#5D9B89]/30 hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] cursor-pointer transition-all duration-300 group",
+      "dashboard_widget": "bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col h-full"
+    },
+    "inputs": {
+      "field": "bg-[#F5F5F4] border-transparent focus:bg-white focus:border-[#5D9B89] focus:ring-2 focus:ring-[#5D9B89]/20 rounded-xl px-4 py-3 text-slate-700 placeholder:text-slate-400 transition-all duration-200 w-full outline-none",
+      "label": "block text-sm font-medium text-slate-700 mb-2 ml-1"
+    },
+    "navigation": {
+      "mobile_bottom": "fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-100 p-4 flex justify-around items-center z-50 pb-safe",
+      "desktop_sidebar": "fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-slate-100 p-6 flex flex-col z-40"
+    },
+    "status_badges": {
+      "active": "bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-medium border border-emerald-200",
+      "pending": "bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-xs font-medium border border-amber-200",
+      "inactive": "bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-medium border border-slate-200"
+    }
+  },
+  "assets": {
+    "icons_library": "lucide-react",
+    "icon_style": "stroke-[1.5px] w-5 h-5",
+    "image_urls": {
+      "professionals": [
+        {
+          "url": "https://images.unsplash.com/photo-1733685318562-c726472bc1db?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwzfHxmcmllbmRseSUyMHRoZXJhcGlzdCUyMHBvcnRyYWl0JTIwcHJvZmVzc2lvbmFsfGVufDB8fHx8MTc3Mjg5NzU2NHww&ixlib=rb-4.1.0&q=85",
+          "category": "professional_avatar",
+          "description": "Female therapist sitting in living room"
+        },
+        {
+          "url": "https://images.unsplash.com/photo-1703798462992-3d0a0cb44682?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwyfHxmcmllbmRseSUyMHRoZXJhcGlzdCUyMHBvcnRyYWl0JTIwcHJvZmVzc2lvbmFsfGVufDB8fHx8MTc3Mjg5NzU2NHww&ixlib=rb-4.1.0&q=85",
+          "category": "professional_avatar",
+          "description": "Male therapist sitting with cat"
+        }
+      ],
+      "children": [
+        {
+          "url": "https://images.unsplash.com/photo-1508431640151-f2217ef26c31?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwxfHxoYXBweSUyMGRpdmVyc2UlMjBjaGlsZCUyMHBsYXlpbmd8ZW58MHx8fHwxNzcyODk3NTY1fDA&ixlib=rb-4.1.0&q=85",
+          "category": "child_avatar",
+          "description": "Boy holding chin on grass"
+        },
+        {
+          "url": "https://images.unsplash.com/photo-1769505313275-c8c9eb934811?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwzfHxoYXBweSUyMGRpdmVyc2UlMjBjaGlsZCUyMHBsYXlpbmd8ZW58MHx8fHwxNzcyODk3NTY1fDA&ixlib=rb-4.1.0&q=85",
+          "category": "child_avatar",
+          "description": "Young girl with colored powder"
+        },
+         {
+          "url": "https://images.unsplash.com/photo-1759831268463-6809e1d67d27?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwyfHxoYXBweSUyMGRpdmVyc2UlMjBjaGlsZCUyMHBsYXlpbmd8ZW58MHx8fHwxNzcyODk3NTY1fDA&ixlib=rb-4.1.0&q=85",
+          "description": "Boy with colored powder on face",
+           "category": "child_avatar"
+        }
+      ],
+      "backgrounds": [
+        {
+          "url": "https://images.unsplash.com/photo-1761888856976-c4bc8303f65f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMHBhc3RlbCUyMHNoYXBlcyUyMGJhY2tncm91bmQlMjBzb2Z0fGVufDB8fHx8MTc3Mjg5NzU2Nnww&ixlib=rb-4.1.0&q=85",
+          "category": "abstract_bg",
+          "description": "Soft orange abstract shapes"
+        },
+        {
+          "url": "https://images.unsplash.com/photo-1761888857629-aa3f306f6bee?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHBhc3RlbCUyMHNoYXBlcyUyMGJhY2tncm91bmQlMjBzb2Z0fGVufDB8fHx8MTc3Mjg5NzU2Nnww&ixlib=rb-4.1.0&q=85",
+          "category": "abstract_bg",
+          "description": "Soft pink waves"
+        }
+      ]
+    }
+  },
+  "motion": {
+    "page_transition": "animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out",
+    "hover_effect": "transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)] hover:-translate-y-1 hover:shadow-lg",
+    "list_stagger": "stagger-100",
+    "instructions": "Use framer-motion for complex layout transitions. Use tailwind-animate for simple entrances."
+  },
+  "accessibility": {
+    "contrast_check": "Ensure text-slate-600+ on backgrounds. Use text-white ONLY on Primary Buttons.",
+    "focus_states": "focus:ring-2 focus:ring-offset-2 focus:ring-[#5D9B89] outline-none",
+    "touch_targets": "Minimum 44px x 44px for all interactive elements (mobile)."
+  },
+  "instructions_to_main_agent": [
+    "1. SETUP: Install 'lucide-react', 'date-fns', 'recharts', 'framer-motion', 'clsx', 'tailwind-merge', 'class-variance-authority'.",
+    "2. THEME: Configure tailwind.config.js with the custom colors provided above. Set up font family.",
+    "3. LAYOUT: Create a Layout component that handles the Mobile Bottom Nav vs Desktop Sidebar responsive logic.",
+    "4. COMPONENTS: Build 'Card', 'Button', 'Badge', 'Avatar' components first using the styles defined.",
+    "5. DATA: Create a 'mockData.js' file using the image URLs provided to simulate the Professional's dashboard.",
+    "6. VIBE: Keep it soft. Avoid harsh borders (use border-slate-100 or border-stone-200). Use generous padding.",
+    "7. TESTING: Add data-testid to all buttons, inputs, and cards.",
+    "8. DO NOT use gradients for text. Keep text readable and high contrast.",
+    "9. Use 'recharts' for any data visualization (activity summary) but style it with the brand palette.",
+    "10. For the Calendar/Planning view, use a clean grid layout or a library like 'react-big-calendar' or custom grid if simple."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic outputs. Avoid this.",
+    "Don't make generic centered layouts. Use grids and negative space.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur) for sticky navs.",
+    "You MUST NOT apply universal transition (transition: all).",
+    "You MUST NOT center align the app container.",
+    "Every interaction needs micro-animations.",
+    "Use 2-3x more spacing than feels comfortable.",
+    "Prioritize using pre-existing components from src/components/ui when applicable."
+  ]
+}

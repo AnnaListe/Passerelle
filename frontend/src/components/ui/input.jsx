@@ -1,19 +1,30 @@
-import * as React from "react"
+import React from 'react';
+import { cn } from '../../lib/utils';
 
-import { cn } from "@/lib/utils"
-
-const Input = React.forwardRef(({ className, type, ...props }, ref) => {
+const Input = React.forwardRef(({ className, type = 'text', ...props }, ref) => {
   return (
     <input
       type={type}
       className={cn(
-        "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+        'bg-input border-transparent focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-xl px-4 py-3 text-slate-700 placeholder:text-slate-400 transition-all duration-200 w-full outline-none',
         className
       )}
       ref={ref}
-      {...props} />
+      {...props}
+    />
   );
-})
-Input.displayName = "Input"
+});
 
-export { Input }
+Input.displayName = 'Input';
+
+const Label = React.forwardRef(({ className, ...props }, ref) => (
+  <label
+    ref={ref}
+    className={cn('block text-sm font-medium text-slate-700 mb-2 ml-1', className)}
+    {...props}
+  />
+));
+
+Label.displayName = 'Label';
+
+export { Input, Label };
