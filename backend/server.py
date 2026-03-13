@@ -911,6 +911,402 @@ async def get_dashboard_stats(professional_id: str = Depends(get_current_user)):
         overdue_invoices_count=overdue_count
     )
 
+# CHILD CRUD ROUTES
+@api_router.post("/children")
+async def create_child(
+    data: dict,
+    professional_id: str = Depends(get_current_user)
+):
+    """Create a new child with all related data"""
+    child_id = f"child-{str(uuid.uuid4())[:8]}"
+    
+    # Calculate age
+    birth_date = datetime.strptime(data['birth_date'], '%Y-%m-%d').date()
+    today = date.today()
+    age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+    
+    # Create child document
+    child_doc = {
+        "id": child_id,
+        "first_name": data['first_name'],
+        "last_name": data['last_name'],
+        "birth_date": data['birth_date'],
+        "age": age,
+        "photo_url": None,
+        "address": data.get('address'),
+        "housing_type": data.get('housing_type'),
+        "own_bedroom": data.get('own_bedroom'),
+        "siblings_count": data.get('siblings_count'),
+        "parents_separated": data.get('parents_separated'),
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc)
+    }
+    await db.children.insert_one(child_doc)
+    
+    # Create parent document from family contacts
+    family = data.get('family_contacts', {})
+    parent_id = f"parent-{str(uuid.uuid4())[:8]}"
+    if family.get('parent1_name'):
+        parent_doc = {
+            "id": parent_id,
+            "first_name": family.get('parent1_name', '').split(' ')[0] if family.get('parent1_name') else '',
+            "last_name": ' '.join(family.get('parent1_name', '').split(' ')[1:]) if family.get('parent1_name') else '',
+            "email": family.get('parent1_email', ''),
+            "phone": family.get('parent1_phone'),
+            "relationship_to_child": "parent",
+            "avatar_url": None
+        }
+        await db.parents.insert_one(parent_doc)
+    
+    # Create child-professional link
+    link_doc = {
+        "id": str(uuid.uuid4()),
+        "child_id": child_id,
+        "professional_id": professional_id,
+        "role_label": "Professionnel principal",
+        "active": True
+    }
+    await db.child_professional_links.insert_one(link_doc)
+    
+    # Create schooling
+    schooling = data.get('schooling', {})
+    if schooling:
+        schooling_doc = {
+            "id": str(uuid.uuid4()),
+            "child_id": child_id,
+            **schooling
+        }
+        await db.child_schooling.insert_one(schooling_doc)
+    
+    # Create weekly schedule
+    weekly_schedule = data.get('weekly_schedule', [])
+    for entry in weekly_schedule:
+        entry_doc = {
+            "id": entry.get('id', str(uuid.uuid4())),
+            "child_id": child_id,
+            "day_of_week": entry['day_of_week'],
+            "start_time": entry['start_time'],
+            "end_time": entry['end_time'],
+            "label": entry['label'],
+            "category": entry.get('category', 'autre'),
+            "location": entry.get('location'),
+            "notes": entry.get('notes'),
+            "related_professional_id": None
+        }
+        await db.child_weekly_schedule.insert_one(entry_doc)
+    
+    # Create medical profile
+    medical = data.get('medical_profile', {})
+    if medical:
+        medical_doc = {
+            "id": str(uuid.uuid4()),
+            "child_id": child_id,
+            **medical
+        }
+        await db.child_medical_profiles.insert_one(medical_doc)
+    
+    # Create communication profile
+    comm = data.get('communication_profile', {})
+    if comm:
+        comm_doc = {
+            "id": str(uuid.uuid4()),
+            "child_id": child_id,
+            **comm
+        }
+        await db.child_communication_profiles.insert_one(comm_doc)
+    
+    # Create goals
+    goals = data.get('goals', {})
+    if goals:
+        goals_doc = {
+            "id": str(uuid.uuid4()),
+            "child_id": child_id,
+            **goals
+        }
+        await db.child_goals.insert_one(goals_doc)
+    
+    # Create family contacts
+    if family:
+        contacts_doc = {
+            "id": str(uuid.uuid4()),
+            "child_id": child_id,
+            **family
+        }
+        await db.family_contacts.insert_one(contacts_doc)
+    
+    # Create additional info
+    additional = data.get('additional_info', {})
+    if additional:
+        additional_doc = {
+            "id": str(uuid.uuid4()),
+            "child_id": child_id,
+            **additional
+        }
+        await db.child_additional_info.insert_one(additional_doc)
+    
+    return {"id": child_id, "message": "Enfant créé avec succès"}
+
+@api_router.put("/children/{child_id}")
+async def update_child(
+    child_id: str,
+    data: dict,
+    professional_id: str = Depends(get_current_user)
+):
+    """Update child and all related data"""
+    # Verify access
+    link = await db.child_professional_links.find_one({
+        "child_id": child_id,
+        "professional_id": professional_id
+    })
+    if not link:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+    
+    # Calculate age
+    birth_date = datetime.strptime(data['birth_date'], '%Y-%m-%d').date()
+    today = date.today()
+    age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+    
+    # Update child
+    await db.children.update_one(
+        {"id": child_id},
+        {"$set": {
+            "first_name": data['first_name'],
+            "last_name": data['last_name'],
+            "birth_date": data['birth_date'],
+            "age": age,
+            "address": data.get('address'),
+            "housing_type": data.get('housing_type'),
+            "own_bedroom": data.get('own_bedroom'),
+            "siblings_count": data.get('siblings_count'),
+            "parents_separated": data.get('parents_separated'),
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    # Update schooling
+    schooling = data.get('schooling', {})
+    await db.child_schooling.update_one(
+        {"child_id": child_id},
+        {"$set": schooling},
+        upsert=True
+    )
+    
+    # Update weekly schedule - delete old and insert new
+    await db.child_weekly_schedule.delete_many({"child_id": child_id})
+    weekly_schedule = data.get('weekly_schedule', [])
+    for entry in weekly_schedule:
+        entry_doc = {
+            "id": entry.get('id', str(uuid.uuid4())),
+            "child_id": child_id,
+            "day_of_week": entry['day_of_week'],
+            "start_time": entry['start_time'],
+            "end_time": entry['end_time'],
+            "label": entry['label'],
+            "category": entry.get('category', 'autre'),
+            "location": entry.get('location'),
+            "notes": entry.get('notes'),
+            "related_professional_id": None
+        }
+        await db.child_weekly_schedule.insert_one(entry_doc)
+    
+    # Update other profiles
+    medical = data.get('medical_profile', {})
+    if medical:
+        await db.child_medical_profiles.update_one(
+            {"child_id": child_id},
+            {"$set": {"child_id": child_id, **medical}},
+            upsert=True
+        )
+    
+    comm = data.get('communication_profile', {})
+    if comm:
+        await db.child_communication_profiles.update_one(
+            {"child_id": child_id},
+            {"$set": {"child_id": child_id, **comm}},
+            upsert=True
+        )
+    
+    goals = data.get('goals', {})
+    if goals:
+        await db.child_goals.update_one(
+            {"child_id": child_id},
+            {"$set": {"child_id": child_id, **goals}},
+            upsert=True
+        )
+    
+    family = data.get('family_contacts', {})
+    if family:
+        await db.family_contacts.update_one(
+            {"child_id": child_id},
+            {"$set": {"child_id": child_id, **family}},
+            upsert=True
+        )
+    
+    additional = data.get('additional_info', {})
+    if additional:
+        await db.child_additional_info.update_one(
+            {"child_id": child_id},
+            {"$set": {"child_id": child_id, **additional}},
+            upsert=True
+        )
+    
+    return {"message": "Enfant mis à jour avec succès"}
+
+# APPOINTMENT ROUTES FOR CHILD PLANNING
+@api_router.get("/appointments/child/{child_id}")
+async def get_child_appointments(
+    child_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    professional_id: str = Depends(get_current_user)
+):
+    """Get appointments for a specific child"""
+    query = {
+        "child_id": child_id,
+        "professional_id": professional_id
+    }
+    
+    if start_date and end_date:
+        query["start_datetime"] = {
+            "$gte": datetime.fromisoformat(start_date.replace('Z', '+00:00')),
+            "$lte": datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        }
+    
+    appointments = await db.appointments.find(query, {"_id": 0}).to_list(100)
+    return appointments
+
+@api_router.post("/appointments")
+async def create_appointment(
+    data: dict,
+    professional_id: str = Depends(get_current_user)
+):
+    """Create a new appointment"""
+    appointment_doc = {
+        "id": str(uuid.uuid4()),
+        "child_id": data['child_id'],
+        "professional_id": professional_id,
+        "title": data['title'],
+        "appointment_type": data.get('appointment_type', 'seance'),
+        "start_datetime": datetime.fromisoformat(data['start_datetime'].replace('Z', '+00:00')),
+        "end_datetime": datetime.fromisoformat(data['end_datetime'].replace('Z', '+00:00')),
+        "location": data.get('location'),
+        "notes": data.get('notes'),
+        "status": "planifie"
+    }
+    await db.appointments.insert_one(appointment_doc)
+    appointment_doc.pop("_id", None)
+    return appointment_doc
+
+@api_router.put("/appointments/{appointment_id}")
+async def update_appointment(
+    appointment_id: str,
+    data: dict,
+    professional_id: str = Depends(get_current_user)
+):
+    """Update an appointment"""
+    result = await db.appointments.update_one(
+        {"id": appointment_id, "professional_id": professional_id},
+        {"$set": {
+            "title": data['title'],
+            "appointment_type": data.get('appointment_type', 'seance'),
+            "start_datetime": datetime.fromisoformat(data['start_datetime'].replace('Z', '+00:00')),
+            "end_datetime": datetime.fromisoformat(data['end_datetime'].replace('Z', '+00:00')),
+            "location": data.get('location'),
+            "notes": data.get('notes'),
+        }}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="RDV non trouvé")
+    return {"message": "RDV mis à jour"}
+
+@api_router.delete("/appointments/{appointment_id}")
+async def delete_appointment(
+    appointment_id: str,
+    professional_id: str = Depends(get_current_user)
+):
+    """Delete an appointment"""
+    result = await db.appointments.delete_one({
+        "id": appointment_id,
+        "professional_id": professional_id
+    })
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="RDV non trouvé")
+    return {"message": "RDV supprimé"}
+
+# INVOICE CREATION FROM CONTRACT
+@api_router.post("/invoices/create-from-contract")
+async def create_invoice_from_contract(
+    data: dict,
+    professional_id: str = Depends(get_current_user)
+):
+    """Create invoice based on contract and appointments"""
+    child_id = data['child_id']
+    period_start = data['period_start']
+    period_end = data['period_end']
+    
+    # Get active contract
+    contract = await db.contracts.find_one({
+        "child_id": child_id,
+        "professional_id": professional_id,
+        "active": True
+    }, {"_id": 0})
+    
+    if not contract:
+        raise HTTPException(status_code=400, detail="Aucun contrat actif trouvé")
+    
+    # Get appointments in period
+    appointments = await db.appointments.find({
+        "child_id": child_id,
+        "professional_id": professional_id,
+        "appointment_type": "seance",
+        "start_datetime": {
+            "$gte": datetime.fromisoformat(period_start),
+            "$lte": datetime.fromisoformat(period_end + 'T23:59:59')
+        }
+    }, {"_id": 0}).to_list(100)
+    
+    session_count = len(appointments)
+    
+    # Calculate amount
+    if contract['billing_mode'] == 'par_seance' and contract.get('session_price'):
+        amount = contract['session_price'] * session_count
+    elif contract['billing_mode'] == 'tarif_horaire' and contract.get('hourly_rate') and contract.get('session_duration_minutes'):
+        hours = contract['session_duration_minutes'] / 60
+        amount = contract['hourly_rate'] * hours * session_count
+    else:
+        amount = 0
+    
+    # Get child info
+    child = await db.children.find_one({"id": child_id}, {"_id": 0})
+    
+    # Generate invoice number
+    count = await db.invoices.count_documents({"professional_id": professional_id})
+    invoice_number = f"FAC-{datetime.now(timezone.utc).year}-{str(count + 1).zfill(3)}"
+    
+    invoice_doc = {
+        "id": str(uuid.uuid4()),
+        "child_id": child_id,
+        "professional_id": professional_id,
+        "parent_id": contract['parent_id'],
+        "invoice_number": invoice_number,
+        "issue_date": date.today().isoformat(),
+        "sent_date": None,
+        "amount_total": amount,
+        "amount_paid": 0.0,
+        "amount_remaining": amount,
+        "status": "brouillon",
+        "payment_date": None,
+        "last_partial_payment_date": None,
+        "payment_method": None,
+        "pdf_document_id": None,
+        "notes": f"Période: {period_start} au {period_end} - {session_count} séance(s)",
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.invoices.insert_one(invoice_doc)
+    invoice_doc.pop("_id", None)
+    return invoice_doc
+
 # Include router
 app.include_router(api_router)
 

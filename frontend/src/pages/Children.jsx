@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { childrenAPI, appointmentsAPI } from '../lib/api';
 import { Card } from '../components/ui/card';
+import { Button } from '../components/ui/button';
 import { Avatar } from '../components/ui/avatar';
 import { Input } from '../components/ui/input';
-import { Users, Search, Calendar, MessageCircle, FileText } from 'lucide-react';
+import { Users, Search, Calendar, MessageCircle, FileText, Plus } from 'lucide-react';
 import { formatDate, formatTime } from '../lib/utils';
 
 const Children = () => {
@@ -62,11 +63,19 @@ const Children = () => {
   return (
     <div className="space-y-6 animate-in" data-testid="children-page">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl md:text-4xl font-bold text-slate-800 font-outfit mb-2">
-          Mes enfants
-        </h1>
-        <p className="text-foreground-muted">Enfants que vous accompagnez</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold text-slate-800 font-outfit mb-2">
+            Mes enfants
+          </h1>
+          <p className="text-foreground-muted">Enfants que vous accompagnez</p>
+        </div>
+        <Link to="/children/new">
+          <Button data-testid="create-child-button">
+            <Plus className="w-4 h-4 mr-2" />
+            Créer un nouvel enfant
+          </Button>
+        </Link>
       </div>
 
       {/* Search */}

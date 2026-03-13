@@ -7,6 +7,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Children from './pages/Children';
 import ChildDetail from './pages/ChildDetail';
+import ChildForm from './pages/ChildForm';
+import ChildPlanning from './pages/ChildPlanning';
 import Planning from './pages/Planning';
 import Messages from './pages/Messages';
 import ConversationDetail from './pages/ConversationDetail';
@@ -41,7 +43,10 @@ function App() {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="children" element={<Children />} />
+            <Route path="children/new" element={<ChildForm />} />
             <Route path="children/:childId" element={<ChildDetail />} />
+            <Route path="children/:childId/edit" element={<ChildForm />} />
+            <Route path="children/:childId/planning" element={<ChildPlanning />} />
             <Route path="planning" element={<Planning />} />
             <Route path="messages" element={<Messages />} />
             <Route path="messages/parent/:conversationId" element={<ConversationDetail />} />

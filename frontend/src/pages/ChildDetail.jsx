@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { childrenAPI, conversationsAPI } from '../lib/api';
+import { childrenAPI, conversationsAPI, contractsAPI, appointmentsAPI, invoicesAPI } from '../lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Avatar } from '../components/ui/avatar';
 import { Badge } from '../components/ui/badge';
+import { Input, Label } from '../components/ui/input';
 import { 
   ArrowLeft, User, School, Calendar, Heart, MessageCircle, 
-  Activity, Target, Sparkles, Phone, Users, Mail, FileText
+  Activity, Target, Sparkles, Phone, Users, Mail, FileText, Edit2, Receipt
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 
@@ -16,6 +17,13 @@ const ChildDetail = () => {
   const navigate = useNavigate();
   const [child, setChild] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceData, setInvoiceData] = useState({
+    period_start: '',
+    period_end: '',
+  });
+  const [invoicePreview, setInvoicePreview] = useState(null);
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
 
   useEffect(() => {
     loadChildDetail();
@@ -48,6 +56,71 @@ const ChildDetail = () => {
     } catch (error) {
       console.error('Error finding conversation:', error);
       navigate('/messages');
+    }
+  };
+
+  const loadInvoicePreview = async () => {
+    if (!invoiceData.period_start || !invoiceData.period_end) return;
+    
+    try {
+      // Get contract
+      const contractsRes = await contractsAPI.list({ child_id: childId });
+      const activeContract = contractsRes.data?.find(c => c.active);
+      
+      if (!activeContract) {
+        setInvoicePreview({ error: 'Aucun contrat actif trouvé' });
+        return;
+      }
+
+      // Get appointments in period
+      const appointmentsRes = await appointmentsAPI.listByChild(childId, {
+        start_date: new Date(invoiceData.period_start).toISOString(),
+        end_date: new Date(invoiceData.period_end + 'T23:59:59').toISOString()
+      }).catch(() => ({ data: [] }));
+
+      const appointments = appointmentsRes.data || [];
+      const sessionCount = appointments.filter(a => a.appointment_type === 'seance').length;
+
+      let totalAmount = 0;
+      if (activeContract.billing_mode === 'par_seance' && activeContract.session_price) {
+        totalAmount = activeContract.session_price * sessionCount;
+      } else if (activeContract.billing_mode === 'tarif_horaire' && activeContract.hourly_rate && activeContract.session_duration_minutes) {
+        const hours = activeContract.session_duration_minutes / 60;
+        totalAmount = activeContract.hourly_rate * hours * sessionCount;
+      }
+
+      setInvoicePreview({
+        contract: activeContract,
+        appointments,
+        sessionCount,
+        totalAmount,
+      });
+    } catch (err) {
+      console.error('Error loading preview:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (showInvoiceModal) {
+      loadInvoicePreview();
+    }
+  }, [invoiceData.period_start, invoiceData.period_end, showInvoiceModal]);
+
+  const handleCreateInvoice = async () => {
+    if (!invoicePreview || invoicePreview.error) return;
+    setCreatingInvoice(true);
+    try {
+      await invoicesAPI.createFromContract({
+        child_id: childId,
+        period_start: invoiceData.period_start,
+        period_end: invoiceData.period_end,
+      });
+      setShowInvoiceModal(false);
+      navigate('/invoices');
+    } catch (err) {
+      console.error('Error creating invoice:', err);
+    } finally {
+      setCreatingInvoice(false);
     }
   };
 
@@ -108,7 +181,7 @@ const ChildDetail = () => {
                   <MessageCircle className="w-4 h-4 mr-2" />
                   Message parent
                 </Button>
-                <Link to={`/planning?child=${childId}`}>
+                <Link to={`/children/${childId}/planning`}>
                   <Button variant="secondary" size="sm" data-testid="view-schedule-button">
                     <Calendar className="w-4 h-4 mr-2" />
                     Planning
@@ -123,6 +196,21 @@ const ChildDetail = () => {
                   <Button variant="outline" size="sm" data-testid="create-quote-button">
                     <FileText className="w-4 h-4 mr-2" />
                     Nouveau devis
+                  </Button>
+                </Link>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowInvoiceModal(true)}
+                  data-testid="create-invoice-button"
+                >
+                  <Receipt className="w-4 h-4 mr-2" />
+                  Créer une facture
+                </Button>
+                <Link to={`/children/${childId}/edit`}>
+                  <Button variant="ghost" size="sm" data-testid="edit-child-button">
+                    <Edit2 className="w-4 h-4 mr-2" />
+                    Modifier la fiche
                   </Button>
                 </Link>
               </div>
@@ -600,6 +688,116 @@ const ChildDetail = () => {
           )}
         </div>
       </div>
+
+      {/* Invoice Creation Modal */}
+      {showInvoiceModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-lg w-full">
+            <CardHeader>
+              <CardTitle>Créer une facture</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Period Selection */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="period_start">Début de période</Label>
+                    <Input
+                      id="period_start"
+                      type="date"
+                      value={invoiceData.period_start}
+                      onChange={(e) => setInvoiceData({...invoiceData, period_start: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="period_end">Fin de période</Label>
+                    <Input
+                      id="period_end"
+                      type="date"
+                      value={invoiceData.period_end}
+                      onChange={(e) => setInvoiceData({...invoiceData, period_end: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                {/* Preview */}
+                {invoicePreview && !invoicePreview.error && (
+                  <div className="p-4 bg-background-subtle rounded-xl space-y-3">
+                    <h4 className="font-semibold text-slate-700">Aperçu de la facture</h4>
+                    
+                    <div className="text-sm space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-foreground-muted">Enfant:</span>
+                        <span className="font-medium">{child.child.first_name} {child.child.last_name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-foreground-muted">Mode de facturation:</span>
+                        <span className="font-medium">
+                          {invoicePreview.contract.billing_mode === 'par_seance' ? 'À la séance' : 'Tarif horaire'}
+                        </span>
+                      </div>
+                      {invoicePreview.contract.billing_mode === 'par_seance' && (
+                        <div className="flex justify-between">
+                          <span className="text-foreground-muted">Prix par séance:</span>
+                          <span className="font-medium">{invoicePreview.contract.session_price}€</span>
+                        </div>
+                      )}
+                      {invoicePreview.contract.billing_mode === 'tarif_horaire' && (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-foreground-muted">Tarif horaire:</span>
+                            <span className="font-medium">{invoicePreview.contract.hourly_rate}€/h</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-foreground-muted">Durée séance:</span>
+                            <span className="font-medium">{invoicePreview.contract.session_duration_minutes} min</span>
+                          </div>
+                        </>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-foreground-muted">Séances sur la période:</span>
+                        <span className="font-medium">{invoicePreview.sessionCount}</span>
+                      </div>
+                      <div className="pt-3 border-t border-slate-200">
+                        <div className="flex justify-between text-lg">
+                          <span className="font-semibold text-slate-700">Total:</span>
+                          <span className="font-bold text-primary">{invoicePreview.totalAmount.toFixed(2)}€</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {invoicePreview?.error && (
+                  <div className="p-4 bg-red-50 rounded-xl">
+                    <p className="text-red-600 text-sm">{invoicePreview.error}</p>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setShowInvoiceModal(false)}
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={handleCreateInvoice}
+                    disabled={!invoicePreview || invoicePreview.error || creatingInvoice || invoicePreview?.sessionCount === 0}
+                  >
+                    <Receipt className="w-4 h-4 mr-2" />
+                    {creatingInvoice ? 'Création...' : 'Créer la facture'}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

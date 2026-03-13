@@ -37,10 +37,16 @@ export const authAPI = {
 export const childrenAPI = {
   list: () => api.get('/children'),
   detail: (childId) => api.get(`/children/${childId}`),
+  create: (data) => api.post('/children', data),
+  update: (childId, data) => api.put(`/children/${childId}`, data),
 };
 
 export const appointmentsAPI = {
   list: (params) => api.get('/appointments', { params }),
+  listByChild: (childId, params) => api.get(`/appointments/child/${childId}`, { params }),
+  create: (data) => api.post('/appointments', data),
+  update: (appointmentId, data) => api.put(`/appointments/${appointmentId}`, data),
+  delete: (appointmentId) => api.delete(`/appointments/${appointmentId}`),
 };
 
 export const conversationsAPI = {
@@ -64,6 +70,11 @@ export const invoicesAPI = {
   list: (params) => api.get('/invoices', { params }),
   detail: (invoiceId) => api.get(`/invoices/${invoiceId}`),
   updateStatus: (invoiceId, data) => api.patch(`/invoices/${invoiceId}/status`, null, { params: data }),
+  createFromContract: (data) => api.post('/invoices/create-from-contract', data),
+};
+
+export const schoolHolidaysAPI = {
+  list: (zone, year) => api.get('/school-holidays', { params: { zone, year } }),
 };
 
 export const dashboardAPI = {
