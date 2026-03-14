@@ -133,7 +133,7 @@ const Children = () => {
                     </div>
                   </div>
 
-                  {nextApt && (
+                  {nextApt ? (
                     <div className="p-3 bg-primary-light rounded-lg mb-4">
                       <div className="flex items-center gap-2 text-sm text-primary font-medium mb-1">
                         <Calendar className="w-4 h-4" />
@@ -141,6 +141,12 @@ const Children = () => {
                       </div>
                       <p className="text-sm text-slate-700">
                         {formatDate(nextApt.start_datetime)} à {formatTime(nextApt.start_datetime)}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-background-subtle rounded-lg mb-4">
+                      <p className="text-sm text-foreground-muted text-center italic">
+                        Aucun RDV de prévu
                       </p>
                     </div>
                   )}
