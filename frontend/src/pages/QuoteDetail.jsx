@@ -48,7 +48,7 @@ const QuoteDetail = () => {
     setUpdating(true);
     try {
       await quotesAPI.convertToContract(quoteId, { start_date: startDate });
-      navigate('/contracts');
+      navigate(`/contracts/${quote.child_id}`);
     } catch (error) {
       console.error('Error converting quote:', error);
       alert('Erreur : Le devis doit être accepté avant conversion');

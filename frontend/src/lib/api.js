@@ -18,7 +18,12 @@ export const childrenAPI = {
   list: async () => {
     const { data, error } = await supabase.from('children').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    return { data };
+    // Calculer l'âge pour chaque enfant
+    const dataWithAge = (data || []).map(child => ({
+      ...child,
+      age: child.birth_date ? Math.floor((new Date() - new Date(child.birth_date)) / (365.25 * 24 * 60 * 60 * 1000)) : null
+    }));
+    return { data: dataWithAge };
   },
   detail: async (childId) => {
     const [childRes, schoolingRes, medicalRes, communicationRes, goalsRes, familyRes, additionalRes, scheduleRes] = await Promise.all([

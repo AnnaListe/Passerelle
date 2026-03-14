@@ -64,6 +64,7 @@ const ChildPlanning = () => {
   const [loading, setLoading] = useState(true);
   const [selectedZone, setSelectedZone] = useState('C');
   const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -182,6 +183,8 @@ const ChildPlanning = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
+    setSaving(true);
     try {
       const startDatetime = new Date(`${formData.date}T${formData.start_time}`);
       const endDatetime = new Date(`${formData.date}T${formData.end_time}`);
@@ -206,6 +209,8 @@ const ChildPlanning = () => {
       loadData();
     } catch (error) {
       console.error('Error saving appointment:', error);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -542,9 +547,9 @@ const ChildPlanning = () => {
                   <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>
                     Annuler
                   </Button>
-                  <Button type="submit" className="flex-1">
-                    <Check className="w-4 h-4 mr-2" />
-                    {editingAppointment ? 'Enregistrer' : 'Créer'}
+                    <Button type="submit" className="flex-1" disabled={saving}>
+                       <Check className="w-4 h-4 mr-2" />
+                       {editingAppointment ? 'Enregistrer' : 'Créer'}
                   </Button>
                 </div>
               </form>
