@@ -1,3 +1,7 @@
+// Neutraliser l'interception Emergent
+if (window._emergentOriginalFetch) {
+  window.fetch = window._emergentOriginalFetch;
+}
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "@/index.css";

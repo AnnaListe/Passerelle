@@ -103,7 +103,6 @@ const QuoteForm = () => {
     setSaving(true);
     
     try {
-      // Get parent_id from child
       const child = children.find(c => c.id === formData.child_id);
       if (!child) {
         setError('Veuillez sélectionner un enfant');
@@ -113,22 +112,16 @@ const QuoteForm = () => {
       
       const payload = {
         child_id: formData.child_id,
-        parent_id: child?.parent_id || null, // Utiliser le vrai parent_id
         billing_mode: formData.billing_mode,
         validity_days: parseInt(formData.validity_days) || 30,
-        description: formData.description || null
+        description: formData.description || null,
+        session_price: formData.billing_mode === 'par_seance' ? Math.round(parseFloat(formData.session_price) * 100) / 100 : null,
+        sessions_per_month: formData.sessions_per_month ? parseInt(formData.sessions_per_month) : null,
+        hourly_rate: formData.billing_mode === 'tarif_horaire' ? Math.round(parseFloat(formData.hourly_rate) * 100) / 100 : null,
+        sessions_per_week: formData.sessions_per_week ? parseInt(formData.sessions_per_week) : null,
+        session_duration_minutes: formData.session_duration_minutes ? parseInt(formData.session_duration_minutes) : null,
       };
-      
-      if (formData.billing_mode === 'par_seance') {
-        payload.session_price = formData.session_price ? Math.round(parseFloat(formData.session_price) * 100) / 100 : null;
-        payload.sessions_per_month = parseInt(formData.sessions_per_month) || null;
-      } else {
-        payload.hourly_rate = formData.hourly_rate ? Math.round(parseFloat(formData.hourly_rate) * 100) / 100 : null;
-        payload.sessions_per_week = parseInt(formData.sessions_per_week) || null;
-        payload.sessions_per_month = parseInt(formData.sessions_per_month) || null;
-        payload.session_duration_minutes = parseInt(formData.session_duration_minutes) || null;
-      }
-      
+
       if (isEditing) {
         await quotesAPI.update(quoteId, payload);
         navigate(`/quotes/${quoteId}`);
@@ -144,6 +137,8 @@ const QuoteForm = () => {
     }
   };
 
+      
+   
   const selectedChild = children.find(c => c.id === formData.child_id);
 
   if (loading) {

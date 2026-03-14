@@ -150,10 +150,27 @@ export const quotesAPI = {
   },
   create: async (data) => {
     const { data: { user } } = await supabase.auth.getUser();
-    const quoteNumber = 'DEV-' + Date.now();
-    const { data: result, error } = await supabase.from('quotes').insert([{ ...data, professional_id: user.id, quote_number: quoteNumber }]).select().single();
-    if (error) throw error;
-    return { data: result };
+    const quoteNumber = 'DEV-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+    const insertData = {
+      child_id: data.child_id,
+      billing_mode: data.billing_mode,
+      validity_days: data.validity_days || 30,
+      description: data.description || null,
+      professional_id: user.id,
+      quote_number: quoteNumber,
+      status: 'brouillon',
+      estimated_monthly_amount: data.billing_mode === 'par_seance' 
+       ? Math.round((data.session_price || 0) * (data.sessions_per_month || 0) * 100) / 100
+       : Math.round((data.hourly_rate || 0) * ((data.session_duration_minutes || 0) / 60) * (data.sessions_per_month || 0) * 100) / 100,
+      session_price: data.session_price || null,
+      sessions_per_month: data.sessions_per_month || null,
+      hourly_rate: data.hourly_rate || null,
+      sessions_per_week: data.sessions_per_week || null,
+      session_duration_minutes: data.session_duration_minutes || null,
+    };
+    const response = await supabase.from('quotes').insert([insertData]).select().single();
+    if (response.error) throw new Error(response.error.message);
+    return { data: response.data };
   },
   update: async (quoteId, data) => {
     const { data: result, error } = await supabase.from('quotes').update(data).eq('id', quoteId).select().single();
