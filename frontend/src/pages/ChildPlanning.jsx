@@ -25,7 +25,6 @@ const ZONES = [
   { value: 'C', label: 'Zone C (Paris, Montpellier, Toulouse...)' },
 ];
 
-// French school holidays 2025-2026 (approximated)
 const SCHOOL_HOLIDAYS_2025_2026 = {
   A: [
     { name: 'Toussaint', start: '2025-10-18', end: '2025-11-03' },
@@ -50,6 +49,13 @@ const SCHOOL_HOLIDAYS_2025_2026 = {
   ],
 };
 
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.setDate(diff));
+}
+
 const ChildPlanning = () => {
   const { childId } = useParams();
   const [child, setChild] = useState(null);
@@ -61,7 +67,6 @@ const ChildPlanning = () => {
   const [editingAppointment, setEditingAppointment] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
 
-  // Form state
   const [formData, setFormData] = useState({
     title: '',
     appointment_type: 'seance',
@@ -71,13 +76,6 @@ const ChildPlanning = () => {
     location: '',
     notes: '',
   });
-
-  function getWeekStart(date) {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.setDate(diff));
-  }
 
   useEffect(() => {
     loadData();
@@ -121,7 +119,6 @@ const ChildPlanning = () => {
     setCurrentWeekStart(getWeekStart(new Date()));
   };
 
-  // Generate week days
   const weekDays = useMemo(() => {
     const days = [];
     for (let i = 0; i < 7; i++) {
@@ -132,14 +129,20 @@ const ChildPlanning = () => {
     return days;
   }, [currentWeekStart]);
 
-  // Check if a date is during school holidays
   const isHoliday = (date) => {
     const dateStr = date.toISOString().split('T')[0];
     const holidays = SCHOOL_HOLIDAYS_2025_2026[selectedZone] || [];
     return holidays.find(h => dateStr >= h.start && dateStr <= h.end);
   };
 
-  // Get appointments for a specific day
+  // Planning de base de la fiche enfant (emploi du temps récurrent)
+  const getScheduleForDay = (date) => {
+    if (!child?.weekly_schedule) return [];
+    const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' }).toLowerCase();
+    return child.weekly_schedule.filter(s => s.day_of_week === dayName);
+  };
+
+  // RDV ponctuels ajoutés par la pro
   const getAppointmentsForDay = (date) => {
     const dateStr = date.toISOString().split('T')[0];
     return appointments.filter(apt => {
@@ -231,7 +234,6 @@ const ChildPlanning = () => {
 
   return (
     <div className="space-y-6 animate-in" data-testid="child-planning">
-      {/* Back Button */}
       <Link to={`/children/${childId}`}>
         <Button variant="ghost" data-testid="back-button">
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -239,7 +241,6 @@ const ChildPlanning = () => {
         </Button>
       </Link>
 
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {child && (
@@ -263,42 +264,21 @@ const ChildPlanning = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => setShowSettings(!showSettings)}
-            data-testid="settings-button"
-          >
+          <Button variant="outline" size="sm" onClick={() => setShowSettings(!showSettings)} data-testid="settings-button">
             <Settings className="w-4 h-4" />
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={goToPreviousWeek}
-            data-testid="prev-week"
-          >
+          <Button variant="outline" size="sm" onClick={goToPreviousWeek} data-testid="prev-week">
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <Button 
-            variant="secondary" 
-            size="sm" 
-            onClick={goToToday}
-            data-testid="today-button"
-          >
+          <Button variant="secondary" size="sm" onClick={goToToday} data-testid="today-button">
             Aujourd'hui
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={goToNextWeek}
-            data-testid="next-week"
-          >
+          <Button variant="outline" size="sm" onClick={goToNextWeek} data-testid="next-week">
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
-      {/* Settings Panel */}
       {showSettings && (
         <Card className="bg-background-subtle">
           <CardContent className="pt-6">
@@ -328,33 +308,48 @@ const ChildPlanning = () => {
         </Card>
       )}
 
-      {/* Week Calendar */}
+      {/* Légende */}
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-slate-200 border border-slate-300 rounded"></div>
+              <span className="text-sm text-slate-600">Emploi du temps (fiche enfant)</span>
+            </div>
+            {APPOINTMENT_TYPES.map(type => (
+              <div key={type.value} className="flex items-center gap-2">
+                <div className={`w-4 h-4 ${type.color} rounded`}></div>
+                <span className="text-sm text-slate-600">{type.label}</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-amber-200 rounded"></div>
+              <span className="text-sm text-slate-600">Vacances scolaires</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Calendrier semaine */}
       <Card className="overflow-hidden">
         <div className="grid grid-cols-7 divide-x divide-slate-200">
           {weekDays.map((day, index) => {
             const isToday = day.toDateString() === new Date().toDateString();
             const holiday = isHoliday(day);
+            const scheduleItems = getScheduleForDay(day);
             const dayAppointments = getAppointmentsForDay(day);
-            
+
             return (
-              <div 
+              <div
                 key={index}
                 className={`min-h-[300px] ${holiday ? 'bg-amber-50' : ''}`}
               >
-                {/* Day Header */}
-                <div 
-                  className={`p-3 text-center border-b border-slate-200 ${
-                    isToday ? 'bg-primary-light' : 'bg-background-subtle'
-                  }`}
-                >
-                  <div className={`text-xs font-medium uppercase mb-1 ${
-                    isToday ? 'text-primary' : 'text-foreground-muted'
-                  }`}>
+                {/* En-tête du jour */}
+                <div className={`p-3 text-center border-b border-slate-200 ${isToday ? 'bg-primary-light' : 'bg-background-subtle'}`}>
+                  <div className={`text-xs font-medium uppercase mb-1 ${isToday ? 'text-primary' : 'text-foreground-muted'}`}>
                     {day.toLocaleDateString('fr-FR', { weekday: 'short' })}
                   </div>
-                  <div className={`text-xl font-bold ${
-                    isToday ? 'text-primary' : 'text-slate-800'
-                  }`}>
+                  <div className={`text-xl font-bold ${isToday ? 'text-primary' : 'text-slate-800'}`}>
                     {day.getDate()}
                   </div>
                   <div className="text-xs text-foreground-muted">
@@ -368,8 +363,26 @@ const ChildPlanning = () => {
                   )}
                 </div>
 
-                {/* Day Content */}
-                <div className="p-2 space-y-2">
+                {/* Contenu du jour */}
+                <div className="p-2 space-y-1">
+                  {/* Emploi du temps de base (grisé) */}
+                  {scheduleItems.map((item, i) => (
+                    <div
+                      key={`schedule-${i}`}
+                      className="bg-slate-100 border border-slate-200 text-slate-500 p-2 rounded-lg text-xs"
+                      title="Emploi du temps récurrent"
+                    >
+                      <div className="font-medium truncate">
+                        {item.start_time} - {item.end_time}
+                      </div>
+                      <div className="truncate">{item.label}</div>
+                      {item.location && (
+                        <div className="truncate opacity-70 text-[10px]">{item.location}</div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* RDV ponctuels (en couleur) */}
                   {dayAppointments.map(apt => (
                     <div
                       key={apt.id}
@@ -382,14 +395,12 @@ const ChildPlanning = () => {
                       </div>
                       <div className="truncate">{apt.title}</div>
                       {apt.location && (
-                        <div className="truncate opacity-80 text-[10px]">
-                          {apt.location}
-                        </div>
+                        <div className="truncate opacity-80 text-[10px]">{apt.location}</div>
                       )}
                     </div>
                   ))}
 
-                  {/* Add button */}
+                  {/* Bouton ajouter */}
                   <button
                     onClick={() => handleOpenModal(day)}
                     className="w-full p-2 border-2 border-dashed border-slate-200 rounded-lg text-slate-400 hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-1 text-xs"
@@ -405,25 +416,7 @@ const ChildPlanning = () => {
         </div>
       </Card>
 
-      {/* Legend */}
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex flex-wrap gap-4">
-            {APPOINTMENT_TYPES.map(type => (
-              <div key={type.value} className="flex items-center gap-2">
-                <div className={`w-4 h-4 ${type.color} rounded`}></div>
-                <span className="text-sm text-slate-600">{type.label}</span>
-              </div>
-            ))}
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-amber-200 rounded"></div>
-              <span className="text-sm text-slate-600">Vacances scolaires</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Summary */}
+      {/* Résumé */}
       <Card className="bg-gradient-to-br from-primary-light to-white border-primary/20">
         <CardContent className="pt-6">
           <div className="flex items-center justify-center gap-3">
@@ -436,7 +429,7 @@ const ChildPlanning = () => {
         </CardContent>
       </Card>
 
-      {/* Modal */}
+      {/* Modal ajout/édition RDV */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="max-w-lg w-full">
@@ -546,12 +539,7 @@ const ChildPlanning = () => {
                 </div>
 
                 <div className="flex gap-3 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setShowModal(false)}
-                  >
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>
                     Annuler
                   </Button>
                   <Button type="submit" className="flex-1">
