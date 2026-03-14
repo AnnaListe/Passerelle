@@ -56,6 +56,7 @@ export const childrenAPI = {
       own_bedroom: payload.own_bedroom,
       siblings_count: payload.siblings_count,
       parents_separated: payload.parents_separated,
+      photo_url: payload.photo_url || null,
     }]).select().single();
     if (error) throw error;
     const childId = child.id;
@@ -84,6 +85,7 @@ export const childrenAPI = {
       own_bedroom: payload.own_bedroom,
       siblings_count: payload.siblings_count,
       parents_separated: payload.parents_separated,
+      photo_url: payload.photo_url || null,
     }).eq('id', childId);
     await Promise.all([
       supabase.from('child_schooling').upsert([{ child_id: childId, ...payload.schooling }], { onConflict: 'child_id' }),

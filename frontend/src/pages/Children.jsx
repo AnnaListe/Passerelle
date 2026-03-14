@@ -8,6 +8,18 @@ import { Input } from '../components/ui/input';
 import { Users, Search, Calendar, MessageCircle, FileText, Plus } from 'lucide-react';
 import { formatDate, formatTime } from '../lib/utils';
 
+const calculateAge = (birthDate) => {
+  if (!birthDate) return null;
+  const today = new Date();
+  const birth = new Date(birthDate);
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+};
+
 const Children = () => {
   const [children, setChildren] = useState([]);
   const [appointments, setAppointments] = useState([]);
@@ -47,7 +59,7 @@ const Children = () => {
     return childAppointments[0];
   };
 
-  const filteredChildren = children.filter(child => 
+  const filteredChildren = children.filter(child =>
     child.first_name.toLowerCase().includes(search.toLowerCase()) ||
     child.last_name.toLowerCase().includes(search.toLowerCase())
   );
@@ -96,6 +108,7 @@ const Children = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredChildren.map((child) => {
             const nextApt = getNextAppointment(child.id);
+            const age = calculateAge(child.birth_date);
             return (
               <Link
                 key={child.id}
@@ -104,9 +117,9 @@ const Children = () => {
               >
                 <Card interactive className="h-full">
                   <div className="flex items-start gap-4 mb-4">
-                    <Avatar 
-                      src={child.photo_url} 
-                      firstName={child.first_name} 
+                    <Avatar
+                      src={child.photo_url}
+                      firstName={child.first_name}
                       lastName={child.last_name}
                       size="xl"
                     />
@@ -114,7 +127,9 @@ const Children = () => {
                       <h3 className="text-lg font-semibold text-slate-700 mb-1">
                         {child.first_name} {child.last_name}
                       </h3>
-                      <p className="text-sm text-foreground-muted">{child.age} ans</p>
+                      <p className="text-sm text-foreground-muted">
+                        {age !== null ? `${age} ans` : ''}
+                      </p>
                     </div>
                   </div>
 

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { childrenAPI } from '../lib/api';
+import { supabase } from '../lib/supabase';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { Avatar } from '../components/ui/avatar';
 import { Button } from '../components/ui/button';
 import { Input, Label } from '../components/ui/input';
 import { 
@@ -77,6 +79,7 @@ const ChildForm = () => {
   // Form state
   const [formData, setFormData] = useState({
     // Section I - Informations générales
+    photo_url: '',
     first_name: '',
     last_name: '',
     birth_date: '',
@@ -295,6 +298,7 @@ const ChildForm = () => {
     try {
       const payload = {
         // Child basic info
+        photo_url: formData.photo_url || null,
         first_name: formData.first_name,
         last_name: formData.last_name,
         birth_date: formData.birth_date,
@@ -428,6 +432,49 @@ const ChildForm = () => {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Photo de profil */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-6">
+              <div className="relative">
+                <Avatar
+                  src={formData.photo_url}
+                  firstName={formData.first_name}
+                  lastName={formData.last_name}
+                  size="xl"
+                  className="w-24 h-24 text-2xl"
+                />
+                <label className="absolute bottom-0 right-0 bg-primary text-white rounded-full p-1.5 cursor-pointer hover:bg-primary/90 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      const fileExt = file.name.split('.').pop();
+                      const fileName = `child-${Date.now()}.${fileExt}`;
+                      const { data, error } = await supabase.storage
+                        .from('avatar')
+                        .upload(fileName, file, { upsert: true });
+                      if (!error) {
+                        const { data: urlData } = supabase.storage
+                          .from('avatar')
+                          .getPublicUrl(fileName);
+                        setFormData({...formData, photo_url: urlData.publicUrl});
+                      }
+                    }}
+                  />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </label>
+              </div>
+              <div>
+                <p className="font-medium text-slate-700">Photo de profil</p>
+                <p className="text-sm text-foreground-muted">Cliquez sur l'icône pour ajouter une photo</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         {/* SECTION I - Informations générales */}
         <AccordionSection
           title="I - Informations générales"
