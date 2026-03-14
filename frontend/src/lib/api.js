@@ -21,19 +21,87 @@ export const childrenAPI = {
     return { data };
   },
   detail: async (childId) => {
-    const { data, error } = await supabase.from('children').select('*').eq('id', childId).single();
-    if (error) throw error;
-    return { data: { child: data, schooling: null, weekly_schedule: [], medical_profile: null, communication_profile: null, goals: null, additional_info: null, family_contacts: null, professionals: [], parent: null } };
+    const [childRes, schoolingRes, medicalRes, communicationRes, goalsRes, familyRes, additionalRes, scheduleRes] = await Promise.all([
+      supabase.from('children').select('*').eq('id', childId).single(),
+      supabase.from('child_schooling').select('*').eq('child_id', childId).maybeSingle(),
+      supabase.from('child_medical_profile').select('*').eq('child_id', childId).maybeSingle(),
+      supabase.from('child_communication_profile').select('*').eq('child_id', childId).maybeSingle(),
+      supabase.from('child_goals').select('*').eq('child_id', childId).maybeSingle(),
+      supabase.from('child_family_contacts').select('*').eq('child_id', childId).maybeSingle(),
+      supabase.from('child_additional_info').select('*').eq('child_id', childId).maybeSingle(),
+      supabase.from('child_weekly_schedule').select('*').eq('child_id', childId).order('day_of_week'),
+    ]);
+    return {
+      data: {
+        child: childRes.data,
+        schooling: schoolingRes.data,
+        weekly_schedule: scheduleRes.data || [],
+        medical_profile: medicalRes.data,
+        communication_profile: communicationRes.data,
+        goals: goalsRes.data,
+        additional_info: additionalRes.data,
+        family_contacts: familyRes.data,
+        professionals: [],
+        parent: null,
+      }
+    };
   },
-  create: async (data) => {
-    const { data: result, error } = await supabase.from('children').insert([data]).select().single();
+  create: async (payload) => {
+    const { data: child, error } = await supabase.from('children').insert([{
+      first_name: payload.first_name,
+      last_name: payload.last_name,
+      birth_date: payload.birth_date,
+      address: payload.address,
+      housing_type: payload.housing_type,
+      own_bedroom: payload.own_bedroom,
+      siblings_count: payload.siblings_count,
+      parents_separated: payload.parents_separated,
+    }]).select().single();
     if (error) throw error;
-    return { data: result };
+    const childId = child.id;
+    await Promise.all([
+      supabase.from('child_schooling').insert([{ child_id: childId, ...payload.schooling }]),
+      supabase.from('child_medical_profile').insert([{ child_id: childId, ...payload.medical_profile }]),
+      supabase.from('child_communication_profile').insert([{ child_id: childId, ...payload.communication_profile }]),
+      supabase.from('child_goals').insert([{ child_id: childId, ...payload.goals }]),
+      supabase.from('child_family_contacts').insert([{ child_id: childId, ...payload.family_contacts }]),
+      supabase.from('child_additional_info').insert([{ child_id: childId, ...payload.additional_info }]),
+      payload.weekly_schedule?.length > 0
+        ? supabase.from('child_weekly_schedule').insert(
+            payload.weekly_schedule.map(s => ({ child_id: childId, day_of_week: s.day_of_week, start_time: s.start_time, end_time: s.end_time, label: s.label, category: s.category, location: s.location || null }))
+          )
+        : Promise.resolve(),
+    ]);
+    return { data: { id: childId, ...child } };
   },
-  update: async (childId, data) => {
-    const { data: result, error } = await supabase.from('children').update(data).eq('id', childId).select().single();
-    if (error) throw error;
-    return { data: result };
+  update: async (childId, payload) => {
+    await supabase.from('children').update({
+      first_name: payload.first_name,
+      last_name: payload.last_name,
+      birth_date: payload.birth_date,
+      address: payload.address,
+      housing_type: payload.housing_type,
+      own_bedroom: payload.own_bedroom,
+      siblings_count: payload.siblings_count,
+      parents_separated: payload.parents_separated,
+    }).eq('id', childId);
+    await Promise.all([
+      supabase.from('child_schooling').upsert([{ child_id: childId, ...payload.schooling }], { onConflict: 'child_id' }),
+      supabase.from('child_medical_profile').upsert([{ child_id: childId, ...payload.medical_profile }], { onConflict: 'child_id' }),
+      supabase.from('child_communication_profile').upsert([{ child_id: childId, ...payload.communication_profile }], { onConflict: 'child_id' }),
+      supabase.from('child_goals').upsert([{ child_id: childId, ...payload.goals }], { onConflict: 'child_id' }),
+      supabase.from('child_family_contacts').upsert([{ child_id: childId, ...payload.family_contacts }], { onConflict: 'child_id' }),
+      supabase.from('child_additional_info').upsert([{ child_id: childId, ...payload.additional_info }], { onConflict: 'child_id' }),
+    ]);
+    if (payload.weekly_schedule) {
+      await supabase.from('child_weekly_schedule').delete().eq('child_id', childId);
+      if (payload.weekly_schedule.length > 0) {
+        await supabase.from('child_weekly_schedule').insert(
+          payload.weekly_schedule.map(s => ({ child_id: childId, day_of_week: s.day_of_week, start_time: s.start_time, end_time: s.end_time, label: s.label, category: s.category, location: s.location || null }))
+        );
+      }
+    }
+    return { data: { id: childId } };
   },
 };
 
@@ -235,7 +303,6 @@ export const documentsAPI = {
 // DASHBOARD
 export const dashboardAPI = {
   stats: async () => {
-    const { data: { user } } = await supabase.auth.getUser();
     const [childrenRes, appointmentsRes, invoicesRes] = await Promise.all([
       supabase.from('children').select('*').limit(5),
       supabase.from('appointments').select('*').gte('start_datetime', new Date().toISOString()).order('start_datetime').limit(5),
