@@ -51,15 +51,33 @@ const Contracts = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      if (editingContract) {
-        await contractsAPI.update(editingContract.id, formData);
+      // Construire le payload avec les bons types numériques
+      const payload = {
+        billing_mode: formData.billing_mode,
+        start_date: formData.start_date,
+        notes: formData.notes || null,
+        sessions_per_month: formData.sessions_per_month ? parseInt(formData.sessions_per_month) : null,
+        sessions_per_week: formData.sessions_per_week ? parseInt(formData.sessions_per_week) : null,
+        session_duration_minutes: formData.session_duration_minutes ? parseInt(formData.session_duration_minutes) : null,
+      };
+
+      if (formData.billing_mode === 'par_seance') {
+        payload.session_price = formData.session_price ? Math.round(parseFloat(formData.session_price) * 100) / 100 : null;
+        payload.hourly_rate = null;
       } else {
-        const child = children.find(c => c.id === selectedChild);
-        // Get parent ID from child data (you might need to add this to the child detail)
+        payload.hourly_rate = formData.hourly_rate ? Math.round(parseFloat(formData.hourly_rate) * 100) / 100 : null;
+        payload.session_price = null;
+      }
+
+      if (editingContract) {
+        await contractsAPI.update(editingContract.id, payload);
+      } else {
+        const childDetail = children.find(c => c.id === selectedChild);
+        const parentId = childDetail?.parent?.id || childDetail?.parent_id || null;
         await contractsAPI.create({
           child_id: selectedChild,
-          parent_id: 'parent-id', // This should come from child data
-          ...formData
+          parent_id: parentId,
+          ...payload
         });
       }
       setShowModal(false);
@@ -68,6 +86,7 @@ const Contracts = () => {
       await loadData();
     } catch (error) {
       console.error('Error saving contract:', error);
+      alert("Erreur lors de l'enregistrement. Veuillez réessayer.");
     }
   };
 
@@ -101,7 +120,7 @@ const Contracts = () => {
 
   const calculateEstimate = (contract) => {
     if (contract.billing_mode === 'par_seance' && contract.session_price) {
-      const sessionsPerMonth = 12; // Estimation
+      const sessionsPerMonth = contract.sessions_per_month || 4; // Default to 4 if not set
       return contract.session_price * sessionsPerMonth;
     } else if (contract.billing_mode === 'tarif_horaire' && contract.hourly_rate && contract.sessions_per_month && contract.session_duration_minutes) {
       const hours = contract.session_duration_minutes / 60;
@@ -209,10 +228,18 @@ const Contracts = () => {
                   </div>
                   
                   {activeContract.billing_mode === 'par_seance' ? (
-                    <div>
-                      <p className="text-sm font-medium text-slate-600 mb-1">Prix par séance</p>
-                      <p className="text-lg font-semibold text-slate-800">{activeContract.session_price}€</p>
-                    </div>
+                    <>
+                      <div>
+                        <p className="text-sm font-medium text-slate-600 mb-1">Prix par séance</p>
+                        <p className="text-lg font-semibold text-slate-800">{activeContract.session_price}€</p>
+                      </div>
+                      {activeContract.sessions_per_month && (
+                        <div>
+                          <p className="text-sm font-medium text-slate-600 mb-1">Séances par mois</p>
+                          <p className="text-sm text-slate-700">{activeContract.sessions_per_month}</p>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <>
                       <div>
@@ -310,17 +337,34 @@ const Contracts = () => {
 
                 {/* Per Session */}
                 {formData.billing_mode === 'par_seance' && (
-                  <div>
-                    <Label htmlFor="session_price">Prix par séance (€)</Label>
-                    <Input
-                      id="session_price"
-                      type="number"
-                      step="0.01"
-                      value={formData.session_price}
-                      onChange={(e) => setFormData({...formData, session_price: e.target.value})}
-                      required
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <Label htmlFor="session_price">Prix par séance (€) *</Label>
+                      <Input
+                        id="session_price"
+                        type="number"
+                        step="0.01"
+                        value={formData.session_price}
+                        onChange={(e) => setFormData({...formData, session_price: e.target.value})}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="sessions_per_month_session">Nombre de séances par mois *</Label>
+                      <Input
+                        id="sessions_per_month_session"
+                        type="number"
+                        min="1"
+                        value={formData.sessions_per_month}
+                        onChange={(e) => setFormData({...formData, sessions_per_month: e.target.value})}
+                        placeholder="Ex: 4"
+                        required
+                      />
+                      <p className="text-xs text-foreground-muted mt-1">
+                        Utilisé pour le calcul des factures
+                      </p>
+                    </div>
+                  </>
                 )}
 
                 {/* Hourly Rate */}

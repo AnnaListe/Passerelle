@@ -37,10 +37,16 @@ export const authAPI = {
 export const childrenAPI = {
   list: () => api.get('/children'),
   detail: (childId) => api.get(`/children/${childId}`),
+  create: (data) => api.post('/children', data),
+  update: (childId, data) => api.put(`/children/${childId}`, data),
 };
 
 export const appointmentsAPI = {
   list: (params) => api.get('/appointments', { params }),
+  listByChild: (childId, params) => api.get(`/appointments/child/${childId}`, { params }),
+  create: (data) => api.post('/appointments', data),
+  update: (appointmentId, data) => api.put(`/appointments/${appointmentId}`, data),
+  delete: (appointmentId) => api.delete(`/appointments/${appointmentId}`),
 };
 
 export const conversationsAPI = {
@@ -64,6 +70,11 @@ export const invoicesAPI = {
   list: (params) => api.get('/invoices', { params }),
   detail: (invoiceId) => api.get(`/invoices/${invoiceId}`),
   updateStatus: (invoiceId, data) => api.patch(`/invoices/${invoiceId}/status`, null, { params: data }),
+  createFromContract: (data) => api.post('/invoices/create-from-contract', data),
+};
+
+export const schoolHolidaysAPI = {
+  list: (zone, year) => api.get('/school-holidays', { params: { zone, year } }),
 };
 
 export const dashboardAPI = {
@@ -77,12 +88,22 @@ export const contractsAPI = {
   update: (contractId, data) => api.put(`/contracts/${contractId}`, data),
 };
 
+// Helper: arrondir les montants financiers à 2 décimales pour éviter les erreurs float
+const roundFinancial = (data) => {
+  const rounded = { ...data };
+  if (rounded.session_price) rounded.session_price = Math.round(parseFloat(rounded.session_price) * 100) / 100;
+  if (rounded.hourly_rate) rounded.hourly_rate = Math.round(parseFloat(rounded.hourly_rate) * 100) / 100;
+  if (rounded.estimated_monthly_amount) rounded.estimated_monthly_amount = Math.round(parseFloat(rounded.estimated_monthly_amount) * 100) / 100;
+  return rounded;
+};
+
 export const quotesAPI = {
   list: (params) => api.get('/quotes', { params }),
   detail: (quoteId) => api.get(`/quotes/${quoteId}`),
-  create: (data) => api.post('/quotes', data),
+  create: (data) => api.post('/quotes', null, { params: roundFinancial(data) }),
+  update: (quoteId, data) => api.put(`/quotes/${quoteId}`, null, { params: roundFinancial(data) }),
   updateStatus: (quoteId, status) => api.patch(`/quotes/${quoteId}/status`, null, { params: { status } }),
-  convertToContract: (quoteId, data) => api.post(`/quotes/${quoteId}/convert-to-contract`, data),
+  convertToContract: (quoteId, data) => api.post(`/quotes/${quoteId}/convert-to-contract`, null, { params: data }),
 };
 
 export const profileAPI = {
