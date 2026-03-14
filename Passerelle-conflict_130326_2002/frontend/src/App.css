@@ -1,0 +1,16 @@
+.App {
+  min-height: 100vh;
+}
+
+.App-link {
+  color: #5D9B89;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
