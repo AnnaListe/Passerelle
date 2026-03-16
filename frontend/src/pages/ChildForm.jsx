@@ -163,6 +163,7 @@ const ChildForm = () => {
       
       setFormData({
         // General
+        photo_url: data.child?.photo_url || '',
         first_name: data.child?.first_name || '',
         last_name: data.child?.last_name || '',
         birth_date: data.child?.birth_date || '',
@@ -287,6 +288,18 @@ const ChildForm = () => {
     setFormData(prev => ({
       ...prev,
       weekly_schedule: prev.weekly_schedule.filter((_, i) => i !== index)
+    }));
+  };
+  const duplicateScheduleEntry = (index, targetDays) => {
+    const entry = formData.weekly_schedule[index];
+    const newEntries = targetDays.map(day => ({
+      ...entry,
+      id: `new-${Date.now()}-${day}`,
+      day_of_week: day
+    }));
+    setFormData(prev => ({
+      ...prev,
+      weekly_schedule: [...prev.weekly_schedule, ...newEntries]
     }));
   };
 
@@ -737,7 +750,12 @@ const ChildForm = () => {
               
               {formData.weekly_schedule.length > 0 ? (
                 <div className="space-y-3">
-                  {formData.weekly_schedule.map((entry, index) => (
+                  {[...formData.weekly_schedule].sort((a, b) => {
+                    const order = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+                    return order.indexOf(a.day_of_week) - order.indexOf(b.day_of_week);
+                  }).map((entry) => {
+                    const index = formData.weekly_schedule.findIndex(e => e.id === entry.id);
+                    return (
                     <div key={entry.id} className="p-4 bg-background-subtle rounded-xl">
                       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                         <select
@@ -787,6 +805,22 @@ const ChildForm = () => {
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        <p className="text-xs text-foreground-muted w-full">Dupliquer vers :</p>
+                        {['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
+                          .filter(d => d !== entry.day_of_week)
+                          .map(day => (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => duplicateScheduleEntry(index, [day])}
+                              className="text-xs px-2 py-1 bg-primary-light text-primary rounded-lg hover:bg-primary hover:text-white transition-colors capitalize"
+                            >
+                              {day.slice(0,3)}
+                            </button>
+                          ))
+                        }
+                      </div>
                       <div className="mt-2">
                         <Input
                           placeholder="Lieu (optionnel)"
@@ -796,7 +830,8 @@ const ChildForm = () => {
                         />
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               ) : (
                 <p className="text-sm text-foreground-muted text-center py-4">
