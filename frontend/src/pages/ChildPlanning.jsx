@@ -11,6 +11,7 @@ import {
   ArrowLeft, Settings, X, Check, Sun
 } from 'lucide-react';
 import { formatTime, formatDate } from '../lib/utils';
+import { supabase } from '../lib/supabase';
 
 const APPOINTMENT_TYPES = [
   { value: 'seance', label: 'Séance', color: 'bg-primary' },
@@ -67,6 +68,17 @@ const ChildPlanning = () => {
   const [saving, setSaving] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRecurringModal, setShowRecurringModal] = useState(false);
+  const [recurringForm, setRecurringForm] = useState({
+  title: '',
+  appointment_type: 'seance',
+  day_of_week: 'lundi',
+  start_time: '09:00',
+  end_time: '10:00',
+  location: '',
+  start_date: new Date().toISOString().split('T')[0],
+  end_date: '',
+  });
 
   const [formData, setFormData] = useState({
     title: '',
@@ -218,9 +230,72 @@ const ChildPlanning = () => {
     if (!window.confirm('Supprimer ce rendez-vous ?')) return;
     try {
       await appointmentsAPI.delete(appointmentId);
+      setShowModal(false);
       loadData();
     } catch (error) {
       console.error('Error deleting appointment:', error);
+    }
+  };
+
+  const handleDeleteRecurring = async (recurringId) => {
+    if (!window.confirm('Supprimer TOUS les RDV de cette récurrence ?')) return;
+    try {
+      await supabase.from('appointments').delete().eq('recurring_id', recurringId);
+      setShowModal(false);
+      loadData();
+    } catch (error) {
+      console.error('Error deleting recurring:', error);
+    }
+  };
+  
+  const handleCreateRecurring = async (e) => {
+    e.preventDefault();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const [y, m, d] = recurringForm.start_date.split('-').map(Number);
+      const startDate = new Date(y, m - 1, d);
+      const endDate = recurringForm.end_date 
+        ? (() => { const [ey, em, ed] = recurringForm.end_date.split('-').map(Number); return new Date(ey, em - 1, ed); })()
+        : new Date(startDate.getFullYear(), startDate.getMonth() + 3, startDate.getDate());      
+      const dayMap = { dimanche: 0, lundi: 1, mardi: 2, mercredi: 3, jeudi: 4, vendredi: 5, samedi: 6 };
+      const targetDay = dayMap[recurringForm.day_of_week];
+
+      const aptList = [];
+      const current = new Date(startDate);
+
+      // Aller au premier jour cible SANS dépasser
+      let daysToAdd = (targetDay - current.getDay() + 7) % 7;
+      current.setDate(current.getDate() + daysToAdd);
+      
+      // Aller au premier jour cible
+      while (current.getDay() !== targetDay) {
+        current.setDate(current.getDate() + 1);
+      }
+      
+      const recurringId = crypto.randomUUID();
+      
+      while (current <= endDate) {
+        const dateStr = `${current.getFullYear()}-${String(current.getMonth()+1).padStart(2,'0')}-${String(current.getDate()).padStart(2,'0')}`;
+        aptList.push({
+          child_id: childId,
+          professional_id: user.id,
+          title: recurringForm.title,
+          appointment_type: recurringForm.appointment_type,
+          start_datetime: `${dateStr}T${recurringForm.start_time}:00`,
+          end_datetime: `${dateStr}T${recurringForm.end_time}:00`,
+          location: recurringForm.location || null,
+          recurring_id: recurringId,
+          is_recurring: true,
+        });
+        current.setDate(current.getDate() + 7);
+      }
+      
+      await supabase.from('appointments').insert(aptList);
+      setShowRecurringModal(false);
+      loadData();
+    } catch (error) {
+      console.error('Error creating recurring appointments:', error);
+      alert('Erreur lors de la création des RDV récurrents');
     }
   };
 
@@ -277,6 +352,10 @@ const ChildPlanning = () => {
           </Button>
           <Button variant="secondary" size="sm" onClick={goToToday} data-testid="today-button">
             Aujourd'hui
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => setShowRecurringModal(true)}>
+            <Plus className="w-4 h-4 mr-1" />
+            RDV récurrent 
           </Button>
           <Button variant="outline" size="sm" onClick={goToNextWeek} data-testid="next-week">
             <ChevronRight className="w-4 h-4" />
@@ -444,17 +523,28 @@ const ChildPlanning = () => {
                   {editingAppointment ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'}
                 </CardTitle>
                 {editingAppointment && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-500 hover:text-red-700"
-                    onClick={() => {
-                      handleDelete(editingAppointment.id);
-                      setShowModal(false);
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:text-red-700"
+                      onClick={() => handleDelete(editingAppointment.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Ce RDV
+                    </Button>
+                    {editingAppointment.is_recurring && editingAppointment.recurring_id && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-700 hover:text-red-900"
+                        onClick={() => handleDeleteRecurring(editingAppointment.recurring_id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Toute la série
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
             </CardHeader>
@@ -551,6 +641,71 @@ const ChildPlanning = () => {
                        <Check className="w-4 h-4 mr-2" />
                        {editingAppointment ? 'Enregistrer' : 'Créer'}
                   </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      {/* Modal RDV récurrent */}
+      {showRecurringModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-lg w-full">
+            <CardHeader>
+              <CardTitle>Créer un RDV récurrent</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCreateRecurring} className="space-y-4">
+                <div>
+                  <Label>Titre *</Label>
+                  <Input value={recurringForm.title} onChange={(e) => setRecurringForm({...recurringForm, title: e.target.value})} placeholder="Ex: Séance orthophonie" required />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Jour de la semaine *</Label>
+                    <select value={recurringForm.day_of_week} onChange={(e) => setRecurringForm({...recurringForm, day_of_week: e.target.value})} className="w-full bg-input border-transparent focus:bg-white focus:border-primary rounded-xl px-4 py-3 text-slate-700 outline-none">
+                      {['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'].map(d => (
+                        <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Type</Label>
+                    <select value={recurringForm.appointment_type} onChange={(e) => setRecurringForm({...recurringForm, appointment_type: e.target.value})} className="w-full bg-input border-transparent focus:bg-white focus:border-primary rounded-xl px-4 py-3 text-slate-700 outline-none">
+                      <option value="seance">Séance</option>
+                      <option value="ecole">École</option>
+                      <option value="activite">Activité</option>
+                      <option value="autre">Autre</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Heure début *</Label>
+                    <Input type="time" value={recurringForm.start_time} onChange={(e) => setRecurringForm({...recurringForm, start_time: e.target.value})} required />
+                  </div>
+                  <div>
+                    <Label>Heure fin *</Label>
+                    <Input type="time" value={recurringForm.end_time} onChange={(e) => setRecurringForm({...recurringForm, end_time: e.target.value})} required />
+                  </div>
+                </div>
+                <div>
+                  <Label>Lieu (optionnel)</Label>
+                  <Input value={recurringForm.location} onChange={(e) => setRecurringForm({...recurringForm, location: e.target.value})} placeholder="Ex: Cabinet" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Date de début *</Label>
+                    <Input type="date" value={recurringForm.start_date} onChange={(e) => setRecurringForm({...recurringForm, start_date: e.target.value})} required />
+                  </div>
+                  <div>
+                    <Label>Date de fin (optionnel)</Label>
+                    <Input type="date" value={recurringForm.end_date} onChange={(e) => setRecurringForm({...recurringForm, end_date: e.target.value})} />
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowRecurringModal(false)}>Annuler</Button>
+                  <Button type="submit" className="flex-1">Créer les RDV</Button>
                 </div>
               </form>
             </CardContent>
