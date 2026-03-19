@@ -34,7 +34,7 @@ export const childrenAPI = {
       supabase.from('child_goals').select('*').eq('child_id', childId).maybeSingle(),
       supabase.from('child_family_contacts').select('*').eq('child_id', childId).maybeSingle(),
       supabase.from('child_additional_info').select('*').eq('child_id', childId).maybeSingle(),
-      supabase.from('child_weekly_schedule').select('*').eq('child_id', childId).order('day_of_week'),
+      supabase.from('child_weekly_schedule').select('*').eq('child_id', childId),
     ]);
     return {
       data: {
@@ -259,6 +259,8 @@ export const appointmentsAPI = {
   list: async (params) => {
     let query = supabase.from('appointments').select('*').order('start_datetime', { ascending: true });
     if (params?.child_id) query = query.eq('child_id', params.child_id);
+    if (params?.start_date) query = query.gte('start_datetime', params.start_date);
+    if (params?.end_date) query = query.lte('start_datetime', params.end_date);
     const { data, error } = await query;
     if (error) throw error;
     return { data };

@@ -98,13 +98,11 @@ const ChildPlanning = () => {
     try {
       const weekEnd = new Date(currentWeekStart);
       weekEnd.setDate(weekEnd.getDate() + 7);
+      weekEnd.setHours(23, 59, 59);
 
       const [childRes, appointmentsRes] = await Promise.all([
         childrenAPI.detail(childId),
-        appointmentsAPI.listByChild(childId, {
-          start_date: currentWeekStart.toISOString(),
-          end_date: weekEnd.toISOString()
-        }).catch(() => ({ data: [] }))
+        appointmentsAPI.listByChild(childId).catch(() => ({ data: [] }))
       ]);
 
       setChild(childRes.data);
