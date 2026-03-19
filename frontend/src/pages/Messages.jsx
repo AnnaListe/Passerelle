@@ -1,36 +1,139 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { conversationsAPI, professionalConversationsAPI } from '../lib/api';
-import { Card } from '../components/ui/card';
+import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { childrenAPI } from '../lib/api';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
+import { Input, Label } from '../components/ui/input';
 import { Avatar } from '../components/ui/avatar';
 import { Badge } from '../components/ui/badge';
-import { MessageCircle, Users } from 'lucide-react';
-import { formatDateTime, truncate } from '../lib/utils';
+import { MessageCircle, Plus, Send, X, ArrowLeft, ChevronRight } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 const Messages = () => {
+  const { user } = useAuth();
   const [conversations, setConversations] = useState([]);
-  const [professionalConversations, setProfessionalConversations] = useState([]);
-  const [activeTab, setActiveTab] = useState('parents');
+  const [selectedConv, setSelectedConv] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [newMessage, setNewMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [newConvData, setNewConvData] = useState({ child_id: '', parent_name: '', parent_email: '', message: '' });
+  const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    loadConversations();
+    loadData();
   }, []);
 
-  const loadConversations = async () => {
+  useEffect(() => {
+    if (selectedConv) loadMessages(selectedConv.id);
+  }, [selectedConv]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const loadData = async () => {
     try {
-      const [parentsRes, prosRes] = await Promise.all([
-        conversationsAPI.list(),
-        professionalConversationsAPI.list()
-      ]);
-      setConversations(parentsRes.data);
-      setProfessionalConversations(prosRes.data);
+      const { data: convs } = await supabase
+        .from('conversations')
+        .select('*, children(first_name, last_name)')
+        .eq('professional_id', user.id)
+        .order('last_message_at', { ascending: false });
+
+      const childrenRes = await childrenAPI.list();
+      setConversations(convs || []);
+      setChildren(childrenRes.data || []);
     } catch (error) {
-      console.error('Error loading conversations:', error);
+      console.error('Error loading data:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadMessages = async (convId) => {
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', convId)
+      .order('created_at', { ascending: true });
+    setMessages(data || []);
+
+    // Marquer comme lus
+    await supabase.from('messages').update({ read_at: new Date().toISOString() })
+      .eq('conversation_id', convId).eq('sender_type', 'parent').is('read_at', null);
+  };
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !selectedConv) return;
+    setSending(true);
+    try {
+      await supabase.from('messages').insert({
+        conversation_id: selectedConv.id,
+        sender_id: user.id,
+        sender_type: 'professional',
+        content: newMessage.trim(),
+      });
+      await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', selectedConv.id);
+      setNewMessage('');
+      loadMessages(selectedConv.id);
+      loadData();
+    } catch (error) {
+      console.error('Error sending message:', error);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleCreateConversation = async (e) => {
+    e.preventDefault();
+    setSending(true);
+    try {
+      // Créer la conversation
+      const { data: conv, error } = await supabase.from('conversations').insert({
+        child_id: newConvData.child_id || null,
+        professional_id: user.id,
+        parent_id: null,
+        last_message_at: new Date().toISOString(),
+      }).select().single();
+
+      if (error) throw error;
+
+      // Envoyer le premier message
+      if (newConvData.message.trim()) {
+        await supabase.from('messages').insert({
+          conversation_id: conv.id,
+          sender_id: user.id,
+          sender_type: 'professional',
+          content: newConvData.message.trim(),
+        });
+      }
+
+      setShowNewModal(false);
+      setNewConvData({ child_id: '', parent_name: '', parent_email: '', message: '' });
+      await loadData();
+      setSelectedConv(conv);
+    } catch (error) {
+      console.error('Error creating conversation:', error);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const getChildName = (conv) => {
+    if (conv.children) return `${conv.children.first_name} ${conv.children.last_name}`;
+    return 'Sans enfant associé';
+  };
+
+  const formatTime = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    if (isToday) return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   };
 
   if (loading) {
@@ -42,138 +145,176 @@ const Messages = () => {
   }
 
   return (
-    <div className="space-y-6 animate-in" data-testid="messages-page">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl md:text-4xl font-bold text-slate-800 font-outfit mb-2">
-          Messages
-        </h1>
-        <p className="text-foreground-muted">Vos conversations</p>
-      </div>
+    <div className="animate-in" data-testid="messages-page">
+      <div className="flex h-[calc(100vh-120px)] gap-4">
 
-      {/* Tabs */}
-      <div className="flex gap-2 border-b border-slate-200">
-        <button
-          onClick={() => setActiveTab('parents')}
-          className={`px-4 py-2 font-medium transition-colors border-b-2 ${
-            activeTab === 'parents' 
-              ? 'border-primary text-primary' 
-              : 'border-transparent text-foreground-muted hover:text-primary'
-          }`}
-          data-testid="tab-parents"
-        >
-          Parents ({conversations.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('professionals')}
-          className={`px-4 py-2 font-medium transition-colors border-b-2 ${
-            activeTab === 'professionals' 
-              ? 'border-primary text-primary' 
-              : 'border-transparent text-foreground-muted hover:text-primary'
-          }`}
-          data-testid="tab-professionals"
-        >
-          Professionnels ({professionalConversations.length})
-        </button>
-      </div>
+        {/* Liste des conversations */}
+        <div className={`${selectedConv ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-80 flex-shrink-0`}>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800 font-outfit">Messages</h1>
+              <p className="text-sm text-foreground-muted">Vos conversations</p>
+            </div>
+            <Button size="sm" onClick={() => setShowNewModal(true)}>
+              <Plus className="w-4 h-4 mr-1" />
+              Nouveau
+            </Button>
+          </div>
 
-      {/* Conversations List */}
-      {activeTab === 'parents' ? (
-        <div className="space-y-3">
-          {conversations.length > 0 ? (
-            conversations.map((conv) => (
-              <Link
-                key={conv.conversation.id}
-                to={`/messages/parent/${conv.conversation.id}`}
-                data-testid={`conversation-${conv.conversation.id}`}
-              >
-                <Card interactive>
-                  <div className="flex items-start gap-4">
-                    <Avatar 
-                      firstName={conv.parent?.first_name} 
-                      lastName={conv.parent?.last_name}
-                      size="lg"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <div>
-                          <p className="font-semibold text-slate-700">
-                            {conv.parent?.first_name} {conv.parent?.last_name}
-                          </p>
-                          <p className="text-sm text-foreground-muted">
-                            Parent de {conv.child?.first_name}
-                          </p>
-                        </div>
-                        {conv.unread_count > 0 && (
-                          <Badge variant="error">{conv.unread_count}</Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-foreground-muted truncate">
-                        {truncate(conv.last_message?.content, 80)}
-                      </p>
-                      <p className="text-xs text-foreground-light mt-1">
-                        {formatDateTime(conv.conversation.last_message_at)}
-                      </p>
+          <div className="space-y-2 overflow-y-auto flex-1">
+            {conversations.length === 0 ? (
+              <Card className="text-center py-12">
+                <MessageCircle className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                <p className="text-foreground-muted text-sm mb-4">Aucune conversation</p>
+                <Button size="sm" onClick={() => setShowNewModal(true)}>
+                  <Plus className="w-4 h-4 mr-1" />
+                  Démarrer une conversation
+                </Button>
+              </Card>
+            ) : (
+              conversations.map((conv) => (
+                <div
+                  key={conv.id}
+                  onClick={() => setSelectedConv(conv)}
+                  className={`p-4 rounded-xl cursor-pointer transition-colors ${selectedConv?.id === conv.id ? 'bg-primary-light border border-primary/20' : 'bg-white border border-slate-200 hover:border-primary/30'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary-light rounded-full flex items-center justify-center flex-shrink-0">
+                      <MessageCircle className="w-5 h-5 text-primary" />
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-700 text-sm truncate">{getChildName(conv)}</p>
+                      <p className="text-xs text-foreground-muted">{formatTime(conv.last_message_at)}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
                   </div>
-                </Card>
-              </Link>
-            ))
-          ) : (
-            <Card className="text-center py-12">
-              <MessageCircle className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-              <p className="text-foreground-muted">Aucune conversation avec les parents</p>
-            </Card>
-          )}
+                </div>
+              ))
+            )}
+          </div>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {professionalConversations.length > 0 ? (
-            professionalConversations.map((conv) => (
-              <Link
-                key={conv.conversation.id}
-                to={`/messages/professional/${conv.conversation.id}`}
-                data-testid={`pro-conversation-${conv.conversation.id}`}
-              >
-                <Card interactive>
-                  <div className="flex items-start gap-4">
-                    <Avatar 
-                      src={conv.other_professional?.avatar_url}
-                      firstName={conv.other_professional?.first_name} 
-                      lastName={conv.other_professional?.last_name}
-                      size="lg"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <div>
-                          <p className="font-semibold text-slate-700">
-                            {conv.other_professional?.first_name} {conv.other_professional?.last_name}
-                          </p>
-                          <p className="text-sm text-foreground-muted">
-                            {conv.other_professional?.profession} • {conv.child?.first_name}
-                          </p>
-                        </div>
-                        {conv.unread_count > 0 && (
-                          <Badge variant="error">{conv.unread_count}</Badge>
-                        )}
+
+        {/* Zone de conversation */}
+        {selectedConv ? (
+          <div className="flex-1 flex flex-col bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            {/* Header conversation */}
+            <div className="flex items-center gap-3 p-4 border-b border-slate-200 bg-background-subtle">
+              <button onClick={() => setSelectedConv(null)} className="md:hidden text-slate-400 hover:text-slate-600">
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div className="w-10 h-10 bg-primary-light rounded-full flex items-center justify-center">
+                <MessageCircle className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-700">{getChildName(selectedConv)}</p>
+                <p className="text-xs text-foreground-muted">Conversation</p>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {messages.length === 0 ? (
+                <div className="text-center py-12 text-foreground-muted text-sm">
+                  Aucun message — écrivez le premier !
+                </div>
+              ) : (
+                messages.map((msg) => {
+                  const isMe = msg.sender_type === 'professional';
+                  return (
+                    <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[70%] px-4 py-3 rounded-2xl text-sm ${isMe ? 'bg-primary text-white rounded-br-sm' : 'bg-background-subtle text-slate-700 rounded-bl-sm'}`}>
+                        <p>{msg.content}</p>
+                        <p className={`text-xs mt-1 ${isMe ? 'text-white/70' : 'text-foreground-muted'}`}>
+                          {formatTime(msg.created_at)}
+                        </p>
                       </div>
-                      <p className="text-sm text-foreground-muted truncate">
-                        {truncate(conv.last_message?.content, 80)}
-                      </p>
-                      <p className="text-xs text-foreground-light mt-1">
-                        {formatDateTime(conv.conversation.last_message_at)}
-                      </p>
                     </div>
-                  </div>
-                </Card>
-              </Link>
-            ))
-          ) : (
-            <Card className="text-center py-12">
-              <Users className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-              <p className="text-foreground-muted">Aucune conversation avec d'autres professionnels</p>
-            </Card>
-          )}
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input message */}
+            <form onSubmit={handleSend} className="p-4 border-t border-slate-200 flex gap-3">
+              <input
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Écrivez votre message..."
+                className="flex-1 bg-input rounded-xl px-4 py-2 text-slate-700 outline-none focus:ring-2 focus:ring-primary/20"
+              />
+              <Button type="submit" disabled={!newMessage.trim() || sending}>
+                <Send className="w-4 h-4" />
+              </Button>
+            </form>
+          </div>
+        ) : (
+          <div className="hidden md:flex flex-1 items-center justify-center bg-white rounded-2xl border border-slate-200">
+            <div className="text-center">
+              <MessageCircle className="w-16 h-16 mx-auto mb-4 text-slate-200" />
+              <p className="text-foreground-muted">Sélectionnez une conversation</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal nouvelle conversation */}
+      {showNewModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-md w-full">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Nouvelle conversation</CardTitle>
+                <button onClick={() => setShowNewModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCreateConversation} className="space-y-4">
+                <div>
+                  <Label>Enfant concerné (optionnel)</Label>
+                  <select
+                    value={newConvData.child_id}
+                    onChange={(e) => setNewConvData({...newConvData, child_id: e.target.value})}
+                    className="w-full bg-input border-transparent focus:bg-white focus:border-primary rounded-xl px-4 py-3 text-slate-700 outline-none mt-1"
+                  >
+                    <option value="">-- Aucun enfant spécifique --</option>
+                    {children.map(child => (
+                      <option key={child.id} value={child.id}>
+                        {child.first_name} {child.last_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <Label>Premier message *</Label>
+                  <textarea
+                    value={newConvData.message}
+                    onChange={(e) => setNewConvData({...newConvData, message: e.target.value})}
+                    className="w-full bg-input border-transparent focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-xl px-4 py-3 text-slate-700 outline-none min-h-[100px] mt-1"
+                    placeholder="Bonjour, je souhaitais vous informer..."
+                    required
+                  />
+                </div>
+
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+                  💡 La messagerie avec les parents sera pleinement opérationnelle quand l'univers Parent sera activé.
+                </div>
+
+                <div className="flex gap-3">
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowNewModal(false)}>
+                    Annuler
+                  </Button>
+                  <Button type="submit" className="flex-1" disabled={sending || !newConvData.message.trim()}>
+                    <Send className="w-4 h-4 mr-2" />
+                    Créer
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>
