@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Users, Calendar, FileText, MessageCircle, Heart, Shield, Zap } from 'lucide-react';
 
 const LandingPage = () => {
+  const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
