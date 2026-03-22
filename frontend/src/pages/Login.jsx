@@ -17,16 +17,14 @@ const Login = () => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
-    const result = await login(email, password);
-    
-    if (result.success) {
+    try {
+      await login(email, password);
       navigate('/dashboard');
-    } else {
-      setError(result.error);
+    } catch (err) {
+      setError('Email ou mot de passe incorrect');
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   return (

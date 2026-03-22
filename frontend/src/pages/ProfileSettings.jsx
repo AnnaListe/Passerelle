@@ -7,6 +7,7 @@ import { Avatar } from '../components/ui/avatar';
 import { User, Save, ArrowLeft, Building, CreditCard, Clock, Upload, ChevronDown, ChevronUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useNavigate } from 'react-router-dom';
 
 const DAYS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
 
@@ -27,6 +28,7 @@ const AccordionSection = ({ title, icon: Icon, iconBg, isOpen, onToggle, childre
 
 const ProfileSettings = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [openSections, setOpenSections] = useState({ identity: true, structure: false, legal: false, bank: false, horaires: false, media: false });
@@ -276,7 +278,7 @@ const ProfileSettings = () => {
         {/* Bouton save fixe */}
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 md:pl-72 z-30">
           <div className="max-w-4xl mx-auto flex gap-4">
-            <Button type="button" variant="danger" onClick={logout} className="flex-shrink-0">
+            <Button type="button" variant="danger" onClick={() => { logout(); navigate('/accueil'); }} className="flex-shrink-0">
               Se déconnecter
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>

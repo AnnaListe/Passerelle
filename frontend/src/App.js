@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
+import LandingPage from './pages/LandingPage';
 import Dashboard from './pages/Dashboard';
 import Children from './pages/Children';
 import ChildDetail from './pages/ChildDetail';
@@ -22,14 +23,19 @@ import QuoteForm from './pages/QuoteForm';
 import Profile from './pages/Profile';
 import ProfileSettings from './pages/ProfileSettings';
 import './App.css';
+import Register from './pages/Register';
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Page d'accueil */}
+          <Route path="/accueil" element={<LandingPage />} />
+
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
 
           {/* Protected Routes */}
           <Route

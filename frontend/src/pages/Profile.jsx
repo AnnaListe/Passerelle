@@ -6,9 +6,11 @@ import { Button } from '../components/ui/button';
 import { Avatar } from '../components/ui/avatar';
 import { User, Mail, Phone, Briefcase, LogOut, Settings, Building } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useNavigate } from 'react-router-dom';
 
 const Profile = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
 
   useEffect(() => {
@@ -101,7 +103,7 @@ const Profile = () => {
                   Configurer mon compte
                 </Button>
               </Link>
-              <Button variant="danger" className="w-full justify-start" onClick={logout} data-testid="logout-button">
+              <Button variant="danger" className="w-full justify-start" onClick={() => { logout(); navigate('/accueil'); }} data-testid="logout-button">
                 <LogOut className="w-4 h-4 mr-2" />
                 Se déconnecter
               </Button>

@@ -16,9 +16,9 @@ export const authAPI = {
 // CHILDREN
 export const childrenAPI = {
   list: async () => {
-    const { data, error } = await supabase.from('children').select('*').order('created_at', { ascending: false });
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase.from('children').select('*').eq('professional_id', user.id).order('created_at', { ascending: false });
     if (error) throw error;
-    // Calculer l'âge pour chaque enfant
     const dataWithAge = (data || []).map(child => ({
       ...child,
       age: child.birth_date ? Math.floor((new Date() - new Date(child.birth_date)) / (365.25 * 24 * 60 * 60 * 1000)) : null
@@ -52,6 +52,7 @@ export const childrenAPI = {
     };
   },
   create: async (payload) => {
+    const { data: { user } } = await supabase.auth.getUser();
     const { data: child, error } = await supabase.from('children').insert([{
       first_name: payload.first_name,
       last_name: payload.last_name,
@@ -62,6 +63,7 @@ export const childrenAPI = {
       siblings_count: payload.siblings_count,
       parents_separated: payload.parents_separated,
       photo_url: payload.photo_url || null,
+      professional_id: user.id,
     }]).select().single();
     if (error) throw error;
     const childId = child.id;
@@ -115,7 +117,8 @@ export const childrenAPI = {
 // CONTRACTS
 export const contractsAPI = {
   list: async (params) => {
-    let query = supabase.from('contracts').select('*').order('created_at', { ascending: false });
+    const { data: { user } } = await supabase.auth.getUser();
+    let query = supabase.from('contracts').select('*').eq('professional_id', user.id).order('created_at', { ascending: false });
     if (params?.child_id) query = query.eq('child_id', params.child_id);
     const { data, error } = await query;
     if (error) throw error;
@@ -142,7 +145,8 @@ export const contractsAPI = {
 // QUOTES
 export const quotesAPI = {
   list: async (params) => {
-    let query = supabase.from('quotes').select('*').order('created_at', { ascending: false });
+    const { data: { user } } = await supabase.auth.getUser();
+    let query = supabase.from('quotes').select('*').eq('professional_id', user.id).order('created_at', { ascending: false });
     if (params?.child_id) query = query.eq('child_id', params.child_id);
     const { data, error } = await query;
     if (error) throw error;
@@ -211,7 +215,8 @@ export const quotesAPI = {
 // INVOICES
 export const invoicesAPI = {
   list: async (params) => {
-    let query = supabase.from('invoices').select('*').order('created_at', { ascending: false });
+    const { data: { user } } = await supabase.auth.getUser();
+    let query = supabase.from('invoices').select('*').eq('professional_id', user.id).order('created_at', { ascending: false });
     if (params?.child_id) query = query.eq('child_id', params.child_id);
     const { data, error } = await query;
     if (error) throw error;
@@ -257,7 +262,8 @@ export const invoicesAPI = {
 // APPOINTMENTS
 export const appointmentsAPI = {
   list: async (params) => {
-    let query = supabase.from('appointments').select('*').order('start_datetime', { ascending: true });
+    const { data: { user } } = await supabase.auth.getUser();
+    let query = supabase.from('appointments').select('*').eq('professional_id', user.id).order('start_datetime', { ascending: true });
     if (params?.child_id) query = query.eq('child_id', params.child_id);
     if (params?.start_date) query = query.gte('start_datetime', params.start_date);
     if (params?.end_date) query = query.lte('start_datetime', params.end_date);
@@ -326,13 +332,13 @@ export const documentsAPI = {
   },
 };
 
-// DASHBOARD
 export const dashboardAPI = {
   stats: async () => {
+    const { data: { user } } = await supabase.auth.getUser();
     const [childrenRes, appointmentsRes, invoicesRes] = await Promise.all([
-      supabase.from('children').select('*').limit(5),
-      supabase.from('appointments').select('*').gte('start_datetime', new Date().toISOString()).order('start_datetime').limit(5),
-      supabase.from('invoices').select('*').order('created_at', { ascending: false }).limit(5),
+      supabase.from('children').select('*').eq('professional_id', user.id).limit(5),
+      supabase.from('appointments').select('*').eq('professional_id', user.id).gte('start_datetime', new Date().toISOString()).order('start_datetime').limit(5),
+      supabase.from('invoices').select('*').eq('professional_id', user.id).order('created_at', { ascending: false }).limit(5),
     ]);
     return {
       data: {
