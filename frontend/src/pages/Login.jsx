@@ -19,7 +19,7 @@ const Login = () => {
     setLoading(true);
     try {
       await login(email, password);
-      navigate('/dashboard');
+      navigate('/');
     } catch (err) {
       setError('Email ou mot de passe incorrect');
     } finally {

@@ -138,9 +138,7 @@ const Register = () => {
 
       // Rediriger selon le type
       if (accountType === 'parent') {
-        navigate('/parent/dashboard');
-      } else {
-        navigate('/dashboard');
+        navigate('/');
       }
 
     } catch (err) {

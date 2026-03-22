@@ -1,10 +1,14 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/layout/Layout';
+import ParentLayout from './components/layout/ParentLayout';
 import Login from './pages/Login';
 import LandingPage from './pages/LandingPage';
+import Register from './pages/Register';
+
+// Pages Pro
 import Dashboard from './pages/Dashboard';
 import Children from './pages/Children';
 import ChildDetail from './pages/ChildDetail';
@@ -22,31 +26,54 @@ import QuoteDetail from './pages/QuoteDetail';
 import QuoteForm from './pages/QuoteForm';
 import Profile from './pages/Profile';
 import ProfileSettings from './pages/ProfileSettings';
+
+// Pages Parent
+import ParentDashboard from './pages/parent/ParentDashboard';
+// import ParentChildProfile from './pages/parent/ParentChildProfile';
+// import ParentPlanning from './pages/parent/ParentPlanning';
+// import ParentMessages from './pages/parent/ParentMessages';
+// import ParentConversation from './pages/parent/ParentConversation';
+// import ParentDocuments from './pages/parent/ParentDocuments';
+// import ParentInvoices from './pages/parent/ParentInvoices';
+// import ParentInvoiceDetail from './pages/parent/ParentInvoiceDetail';
+// import ParentMood from './pages/parent/ParentMood';
+// import ParentProfessionals from './pages/parent/ParentProfessionals';
+// import ParentProfile from './pages/parent/ParentProfile';
+
 import './App.css';
-import Register from './pages/Register';
+
+// Redirection intelligente selon le type d'utilisateur
+const SmartRedirect = () => {
+  const { userType, loading } = useAuth();
+  
+  if (loading || !userType) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+    </div>
+  );
+  
+  if (userType === 'parent') return <Navigate to="/parent/dashboard" replace />;
+  return <Navigate to="/dashboard" replace />;
+};
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Page d'accueil */}
-          <Route path="/accueil" element={<LandingPage />} />
-
-          {/* Public Routes */}
+          {/* Public */}
           <Route path="/login" element={<Login />} />
+          <Route path="/accueil" element={<LandingPage />} />
           <Route path="/register" element={<Register />} />
 
-          {/* Protected Routes */}
+          {/* Redirection intelligente */}
+          <Route path="/" element={<ProtectedRoute><SmartRedirect /></ProtectedRoute>} />
+
+          {/* Univers Pro */}
           <Route
             path="/"
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
+            element={<ProtectedRoute><Layout /></ProtectedRoute>}
           >
-            <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="children" element={<Children />} />
             <Route path="children/new" element={<ChildForm />} />
@@ -70,8 +97,26 @@ function App() {
             <Route path="profile/settings" element={<ProfileSettings />} />
           </Route>
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Univers Parent */}
+          <Route
+            path="/parent"
+            element={<ProtectedRoute><ParentLayout /></ProtectedRoute>}
+          >
+            <Route index element={<Navigate to="/parent/dashboard" replace />} />
+            <Route path="dashboard" element={<ParentDashboard />} />
+            {/* <Route path="enfant" element={<ParentChildProfile />} /> */}
+            {/* <Route path="planning" element={<ParentPlanning />} /> */}
+            {/* <Route path="messages" element={<ParentMessages />} /> */}
+            {/* <Route path="messages/:id" element={<ParentConversation />} /> */}
+            {/* <Route path="documents" element={<ParentDocuments />} /> */}
+            {/* <Route path="factures" element={<ParentInvoices />} /> */}
+            {/* <Route path="factures/:id" element={<ParentInvoiceDetail />} /> */}
+            {/* <Route path="mood" element={<ParentMood />} /> */}
+            {/* <Route path="professionnels" element={<ParentProfessionals />} /> */}
+            {/* <Route path="profil" element={<ParentProfile />} /> */}
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
