@@ -29,13 +29,13 @@ import ProfileSettings from './pages/ProfileSettings';
 
 // Pages Parent
 import ParentDashboard from './pages/parent/ParentDashboard';
-// import ParentChildProfile from './pages/parent/ParentChildProfile';
-// import ParentPlanning from './pages/parent/ParentPlanning';
-// import ParentMessages from './pages/parent/ParentMessages';
-// import ParentConversation from './pages/parent/ParentConversation';
-// import ParentDocuments from './pages/parent/ParentDocuments';
-// import ParentInvoices from './pages/parent/ParentInvoices';
-// import ParentInvoiceDetail from './pages/parent/ParentInvoiceDetail';
+import ParentChildProfile from './pages/parent/ParentChildProfile';
+import ParentPlanning from './pages/parent/ParentPlanning';
+import ParentMessages from './pages/parent/ParentMessages';
+import ParentConversation from './pages/parent/ParentConversation';
+import ParentDocuments from './pages/parent/ParentDocuments';
+import ParentInvoices from './pages/parent/ParentInvoices';
+import ParentInvoiceDetail from './pages/parent/ParentInvoiceDetail';
 // import ParentMood from './pages/parent/ParentMood';
 // import ParentProfessionals from './pages/parent/ParentProfessionals';
 // import ParentProfile from './pages/parent/ParentProfile';
@@ -104,13 +104,13 @@ function App() {
           >
             <Route index element={<Navigate to="/parent/dashboard" replace />} />
             <Route path="dashboard" element={<ParentDashboard />} />
-            {/* <Route path="enfant" element={<ParentChildProfile />} /> */}
-            {/* <Route path="planning" element={<ParentPlanning />} /> */}
-            {/* <Route path="messages" element={<ParentMessages />} /> */}
-            {/* <Route path="messages/:id" element={<ParentConversation />} /> */}
-            {/* <Route path="documents" element={<ParentDocuments />} /> */}
-            {/* <Route path="factures" element={<ParentInvoices />} /> */}
-            {/* <Route path="factures/:id" element={<ParentInvoiceDetail />} /> */}
+            <Route path="enfant" element={<ParentChildProfile />} /> 
+            <Route path="planning" element={<ParentPlanning />} />
+            <Route path="messages" element={<ParentMessages />} /> 
+            <Route path="messages/:id" element={<ParentConversation />} /> 
+            <Route path="documents" element={<ParentDocuments />} />
+            <Route path="factures" element={<ParentInvoices />} /> 
+            <Route path="factures/:id" element={<ParentInvoiceDetail />} /> 
             {/* <Route path="mood" element={<ParentMood />} /> */}
             {/* <Route path="professionnels" element={<ParentProfessionals />} /> */}
             {/* <Route path="profil" element={<ParentProfile />} /> */}

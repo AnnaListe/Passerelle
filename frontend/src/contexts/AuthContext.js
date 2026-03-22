@@ -8,8 +8,7 @@ export const AuthProvider = ({ children }) => {
   const [userType, setUserType] = useState(null); // 'professional' ou 'parent'
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Vérifier la session existante
+useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
@@ -19,12 +18,8 @@ export const AuthProvider = ({ children }) => {
       }
     });
 
-    // Écouter les changements d'auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUser(session.user);
-        detectUserType(session.user.id);
-      } else {
+      if (_event === 'SIGNED_OUT') {
         setUser(null);
         setUserType(null);
         setLoading(false);

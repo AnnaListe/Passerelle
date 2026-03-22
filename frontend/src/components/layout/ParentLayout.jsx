@@ -1,12 +1,12 @@
 import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Calendar, MessageCircle, FileText, User } from 'lucide-react';
+import { Home, Calendar, MessageCircle, FileText, User, Heart } from 'lucide-react';
 
 const NAV_ITEMS = [
   { path: '/parent/dashboard', icon: Home, label: 'Accueil' },
+  { path: '/parent/enfant', icon: Heart, label: 'Mon enfant' },
   { path: '/parent/planning', icon: Calendar, label: 'Planning' },
   { path: '/parent/messages', icon: MessageCircle, label: 'Messages' },
-  { path: '/parent/documents', icon: FileText, label: 'Documents' },
   { path: '/parent/profil', icon: User, label: 'Profil' },
 ];
 

@@ -81,11 +81,13 @@ export default function ParentDashboard() {
       setRecentConversations(convs || []);
 
       // Factures récentes
-      const { data: invs } = await supabase.from('invoices').select('*')
-        .order('created_at', { ascending: false })
-        .limit(2);
-      setRecentInvoices(invs || []);
-
+      if (linkData?.child_id) {
+        const { data: invs } = await supabase.from('invoices').select('*')
+          .eq('child_id', linkData.child_id)
+          .order('created_at', { ascending: false })
+          .limit(2);
+        setRecentInvoices(invs || []);
+      }
     } catch (error) {
       console.error('Error loading parent dashboard:', error);
     } finally {
