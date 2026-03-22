@@ -18,8 +18,9 @@ const Login = () => {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
-      navigate('/');
+      const result = await login(email, password);
+      console.log('Login result:', result);
+      setTimeout(() => navigate('/redirect'), 500);
     } catch (err) {
       setError('Email ou mot de passe incorrect');
     } finally {

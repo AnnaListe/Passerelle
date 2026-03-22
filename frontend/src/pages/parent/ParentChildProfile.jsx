@@ -36,7 +36,7 @@ const ToggleField = ({ label, value, editValue, editing, onChange }) => (
   <div className="flex items-center justify-between py-2.5 border-b border-stone-50 last:border-0">
     <span className="text-sm text-slate-600 font-body">{label}</span>
     {editing ? (
-      <select value={editValue?.toString()} onChange={e => onChange(e.target.value === 'true')}
+      <select value={editValue === undefined ? 'false' : editValue?.toString()} onChange={e => onChange(e.target.value === 'true')}
         className="h-8 px-3 bg-stone-50 border border-stone-200 rounded-lg text-sm font-body">
         <option value="true">Oui</option>
         <option value="false">Non</option>
@@ -152,7 +152,17 @@ export default function ParentChildProfile() {
       setSchooling(schoolRes.data || {});
       setMedical(medRes.data || {});
       setCommunication(commRes.data || {});
-      setFamily(familyRes.data || {});
+      if (familyRes.data?.parent1_name) {
+        setFamily(familyRes.data);
+      } else {
+        const { data: parentProfile } = await supabase.from('parents').select('*').eq('id', user.id).maybeSingle();
+        setFamily({
+          ...(familyRes.data || {}),
+          parent1_name: parentProfile ? `${parentProfile.first_name} ${parentProfile.last_name}` : '',
+          parent1_phone: parentProfile?.phone || '',
+          parent1_email: parentProfile?.email || '',
+        });
+      }
       setAdditionalInfo(addRes.data || {});
       setWeeklySchedule(schedRes.data || []);
     } catch (error) {
@@ -334,7 +344,7 @@ export default function ParentChildProfile() {
         <div className="py-2.5 border-b border-stone-50">
           <p className="text-xs text-slate-400 font-body mb-1">Type de logement</p>
           {editingGeneral ? (
-            <select value={generalEdit.housing_type || ''} onChange={e => setGeneralEdit(p => ({...p, housing_type: e.target.value}))}
+            <select value={generalEdit.housing_type || 'maison'} onChange={e => setGeneralEdit(p => ({...p, housing_type: e.target.value}))}
               className="w-full h-9 px-3 bg-stone-50 border border-stone-200 rounded-xl text-sm font-body">
               <option value="maison">Maison</option>
               <option value="appartement">Appartement</option>
@@ -406,7 +416,7 @@ export default function ParentChildProfile() {
             <div className="flex gap-2 flex-wrap">
               {['verbal', 'non_verbal', 'alternatif'].map(opt => (
                 <button key={opt} onClick={() => setCommunicationEdit(p => ({...p, communication_type: opt}))}
-                  className={`px-3 py-1.5 rounded-full text-xs font-heading font-semibold border ${communicationEdit.communication_type === opt ? 'bg-sage-500 text-white border-sage-500' : 'bg-white text-slate-600 border-stone-200'}`}>
+                  className={`px-3 py-1.5 rounded-full text-xs font-heading font-semibold border ${communicationEdit.communication_type === opt ? 'bg-sage-600 text-white border-sage-600' : 'bg-white text-slate-600 border-stone-200'}`}>
                   {opt === 'verbal' ? 'Verbal' : opt === 'non_verbal' ? 'Non verbal' : 'Alternatif'}
                 </button>
               ))}

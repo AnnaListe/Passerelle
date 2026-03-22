@@ -19,7 +19,10 @@ useEffect(() => {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (_event === 'SIGNED_OUT') {
+      if (_event === 'SIGNED_IN' && session?.user) {
+        setUser(session.user);
+        detectUserType(session.user.id);
+      } else if (_event === 'SIGNED_OUT') {
         setUser(null);
         setUserType(null);
         setLoading(false);
@@ -37,7 +40,7 @@ useEffect(() => {
         .eq('id', userId)
         .maybeSingle();
 
-      console.log('detectUserType - parentData:', parentData, 'userId:', userId);
+      console.log('detectUserType called with userId:', userId, 'at', new Date().toISOString());
 
       if (parentData) {
         setUserType('parent');
@@ -55,9 +58,11 @@ useEffect(() => {
   const login = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    setUser(data.user);
+    detectUserType(data.user.id);
     return data;
   };
-
+  
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
