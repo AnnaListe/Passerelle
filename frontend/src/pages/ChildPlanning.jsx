@@ -249,7 +249,7 @@ const ChildPlanning = () => {
   const handleCreateRecurring = async (e) => {
     e.preventDefault();
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
       const [y, m, d] = recurringForm.start_date.split('-').map(Number);
       const startDate = new Date(y, m - 1, d);
       const endDate = recurringForm.end_date 
@@ -288,7 +288,11 @@ const ChildPlanning = () => {
         current.setDate(current.getDate() + 7);
       }
       
-      await supabase.from('appointments').insert(aptList);
+      const { data: { user } } = await supabase.auth.getUser();
+      const aptListWithPro = aptList.map(apt => ({ ...apt, professional_id: currentUser.id }));
+      await supabase.from('appointments').insert(aptListWithPro);
+      setShowRecurringModal(false);
+      loadData();
       setShowRecurringModal(false);
       loadData();
     } catch (error) {
