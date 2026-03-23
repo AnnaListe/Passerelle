@@ -235,17 +235,6 @@ const ChildPlanning = () => {
     }
   };
 
-  const handleDeleteRecurring = async (recurringId) => {
-    if (!window.confirm('Supprimer TOUS les RDV de cette récurrence ?')) return;
-    try {
-      await supabase.from('appointments').delete().eq('recurring_id', recurringId);
-      setShowModal(false);
-      loadData();
-    } catch (error) {
-      console.error('Error deleting recurring:', error);
-    }
-  };
-  
   const handleCreateRecurring = async (e) => {
     e.preventDefault();
     try {
@@ -261,14 +250,8 @@ const ChildPlanning = () => {
       const aptList = [];
       const current = new Date(startDate);
 
-      // Aller au premier jour cible SANS dépasser
       let daysToAdd = (targetDay - current.getDay() + 7) % 7;
       current.setDate(current.getDate() + daysToAdd);
-      
-      // Aller au premier jour cible
-      while (current.getDay() !== targetDay) {
-        current.setDate(current.getDate() + 1);
-      }
       
       const recurringId = crypto.randomUUID();
       
@@ -276,7 +259,7 @@ const ChildPlanning = () => {
         const dateStr = `${current.getFullYear()}-${String(current.getMonth()+1).padStart(2,'0')}-${String(current.getDate()).padStart(2,'0')}`;
         aptList.push({
           child_id: childId,
-          professional_id: user.id,
+          professional_id: currentUser.id,
           title: recurringForm.title,
           appointment_type: recurringForm.appointment_type,
           start_datetime: `${dateStr}T${recurringForm.start_time}:00`,
@@ -288,11 +271,7 @@ const ChildPlanning = () => {
         current.setDate(current.getDate() + 7);
       }
       
-      const { data: { user } } = await supabase.auth.getUser();
-      const aptListWithPro = aptList.map(apt => ({ ...apt, professional_id: currentUser.id }));
-      await supabase.from('appointments').insert(aptListWithPro);
-      setShowRecurringModal(false);
-      loadData();
+      await supabase.from('appointments').insert(aptList);
       setShowRecurringModal(false);
       loadData();
     } catch (error) {
