@@ -12,6 +12,14 @@ const PROFESSIONS = [
   'Sophrologie / Relaxation', 'Art-thérapeute', 'Autre',
 ];
 
+const PROFESSION_TO_MEDICAL = {
+  'Orthophoniste': 'orthophonist',
+  'Psychomotricien(ne)': 'psychomotor',
+  'Ergothérapeute': 'occupational_therapist',
+  'Psychologue / Neuropsychologue': 'psychologist',
+  'Kinésithérapeute': 'kinesiotherapist',
+};
+
 export default function ParentProfessionals() {
   const { user } = useAuth();
   const [childId, setChildId] = useState(null);
@@ -78,6 +86,23 @@ export default function ParentProfessionals() {
         is_on_passerelle: true,
         access_mode: 'complet',
       });
+  // Sync avec fiche médicale
+  const medicalKey = PROFESSION_TO_MEDICAL[manualForm.profession];
+  if (medicalKey) {
+    const { data: existing } = await supabase.from('child_medical_profile')
+      .select('id').eq('child_id', childId).maybeSingle();
+    if (existing) {
+      await supabase.from('child_medical_profile').update({
+        [`${medicalKey}_active`]: true,
+      }).eq('child_id', childId);
+    } else {
+      await supabase.from('child_medical_profile').insert({
+        child_id: childId,
+        [`${medicalKey}_active`]: true,
+      });
+    }
+  }
+
       setShowAdd(false);
       setMode(null);
       setSearchQuery('');
@@ -114,7 +139,7 @@ export default function ParentProfessionals() {
       setSaving(false);
     }
   };
-
+    
   const removePro = async (id) => {
     if (!window.confirm('Retirer ce professionnel ?')) return;
     await supabase.from('child_professionals').delete().eq('id', id);

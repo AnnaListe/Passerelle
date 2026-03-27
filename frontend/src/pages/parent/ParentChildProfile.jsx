@@ -129,6 +129,8 @@ export default function ParentChildProfile() {
   const [newChild, setNewChild] = useState({ first_name: '', last_name: '', birth_date: '' });
   const [creatingChild, setCreatingChild] = useState(false);
 
+  const [linkedPros, setLinkedPros] = useState([]);
+
   useEffect(() => {
     if (user) loadData();
   }, [user]);
@@ -148,6 +150,9 @@ export default function ParentChildProfile() {
         supabase.from('child_additional_info').select('*').eq('child_id', link.child_id).maybeSingle(),
         supabase.from('child_weekly_schedule').select('*').eq('child_id', link.child_id).order('day_of_week'),
       ]);
+
+      const { data: prosData } = await supabase.from('child_professionals').select('*').eq('child_id', link.child_id);
+      setLinkedPros(prosData || []);
 
       setChild(childRes.data);
       setGeneral(childRes.data || {});
@@ -560,21 +565,39 @@ export default function ParentChildProfile() {
         {medical.treatment_active && (
           <TextField label="Détail du traitement" value={medical.treatment_details} editValue={medicalEdit.treatment_details} editing={editingMedical} onChange={v => setMedicalEdit(p => ({...p, treatment_details: v}))} multiline />
         )}
-        {[
-          { key: 'orthophonist', label: 'Orthophoniste' },
-          { key: 'psychologist', label: 'Psychologue / Neuropsychologue' },
-          { key: 'psychomotor', label: 'Psychomotricien(ne)' },
-          { key: 'occupational_therapist', label: 'Ergothérapeute' },
-          { key: 'sessad', label: 'SESSAD' },
-        ].map(({ key, label }) => (
-          <div key={key}>
-            <ToggleField label={label} value={medical[`${key}_active`]} editValue={medicalEdit[`${key}_active`]} editing={editingMedical} onChange={v => setMedicalEdit(p => ({...p, [`${key}_active`]: v}))} />
-            {medical[`${key}_active`] && (
-              <TextField label="Fréquence" value={medical[`${key}_frequency`]} editValue={medicalEdit[`${key}_frequency`]} editing={editingMedical} onChange={v => setMedicalEdit(p => ({...p, [`${key}_frequency`]: v}))} />
-            )}
-          </div>
-        ))}
-        <TextField label="Autres professionnels" value={medical.other_professionals} editValue={medicalEdit.other_professionals} editing={editingMedical} onChange={v => setMedicalEdit(p => ({...p, other_professionals: v}))} multiline />
+        
+          {[
+            { key: 'orthophonist', label: 'Orthophoniste', profession: 'Orthophoniste' },
+            { key: 'psychologist', label: 'Psychologue / Neuropsychologue', profession: 'Psychologue / Neuropsychologue' },
+            { key: 'psychomotor', label: 'Psychomotricien(ne)', profession: 'Psychomotricien(ne)' },
+            { key: 'occupational_therapist', label: 'Ergothérapeute', profession: 'Ergothérapeute' },
+            { key: 'sessad', label: 'SESSAD', profession: 'SESSAD' },
+            { key: 'kinesitherapeute', label: 'Kinésithérapeute', profession: 'Kinésithérapeute' },
+            { key: 'aba', label: 'ABA Thérapeute', profession: 'ABA Thérapeute' },
+            { key: 'osteopathe', label: 'Ostéopathe', profession: 'Ostéopathe' },
+            { key: 'dieteticien', label: 'Diététicien(ne)', profession: 'Diététicien(ne)' },
+            { key: 'orthoptiste', label: 'Orthoptiste', profession: 'Orthoptiste' },
+            { key: 'sophrologue', label: 'Sophrologie / Relaxation', profession: 'Sophrologie / Relaxation' },
+            { key: 'art_therapeute', label: 'Art-thérapeute', profession: 'Art-thérapeute' },
+            { key: 'other_professional', label: 'Autre professionnel', profession: 'Autre' },
+          ].map(({ key, label, profession }) => {
+            const linkedPro = linkedPros.find(p => p.profession === profession);
+            return (
+              <div key={key}>
+                <ToggleField label={label} value={medical[`${key}_active`]} editValue={medicalEdit[`${key}_active`]} editing={editingMedical} onChange={v => setMedicalEdit(p => ({...p, [`${key}_active`]: v}))} />
+                {linkedPro && !editingMedical && (
+                  <div className="px-3 py-2 mb-2 bg-sage-50 rounded-xl">
+                    <p className="text-xs text-slate-400 font-body mb-0.5">Professionnel lié</p>
+                    <p className="text-sm font-heading font-semibold text-sage-700">{linkedPro.professional_name}</p>
+                  {linkedPro.phone && <p className="text-xs text-slate-400 font-body">{linkedPro.phone}</p>}
+                </div>
+              )}
+              {medical[`${key}_active`] && (
+                <TextField label="Fréquence" value={medical[`${key}_frequency`]} editValue={medicalEdit[`${key}_frequency`]} editing={editingMedical} onChange={v => setMedicalEdit(p => ({...p, [`${key}_frequency`]: v}))} />
+              )}
+            </div>
+          );
+        })}
       </Section>
 
       {/* Section 3 — Communication */}
