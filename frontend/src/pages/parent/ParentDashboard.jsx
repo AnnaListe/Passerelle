@@ -300,6 +300,28 @@ export default function ParentDashboard() {
         </div>
       )}
 
+      {/* Mon équipe */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <p className="section-label">Mon équipe</p>
+          <button onClick={() => navigate('/parent/professionnels')} className="text-sage-600 font-heading font-semibold text-xs flex items-center gap-1">
+            Gérer <ChevronRight size={14} />
+          </button>
+        </div>
+        <div
+          className="passerelle-card cursor-pointer !p-4 flex items-center gap-3"
+          onClick={() => navigate('/parent/professionnels')}
+        >
+          <div className="w-10 h-10 rounded-xl bg-sage-50 flex items-center justify-center flex-shrink-0">
+            <Users size={18} className="text-sage-600" />
+          </div>
+          <div className="flex-1">
+            <p className="font-heading font-semibold text-sm text-slate-700">Professionnels de mon enfant</p>
+            <p className="text-xs text-slate-400 font-body">Gérer l'équipe de suivi</p>
+          </div>
+          <ChevronRight size={16} className="text-slate-300" />
+        </div>
+      </div>
       <div className="h-4" />
     </div>
   );

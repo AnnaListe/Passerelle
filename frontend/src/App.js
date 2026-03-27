@@ -37,7 +37,7 @@ import ParentDocuments from './pages/parent/ParentDocuments';
 import ParentInvoices from './pages/parent/ParentInvoices';
 import ParentInvoiceDetail from './pages/parent/ParentInvoiceDetail';
 // import ParentMood from './pages/parent/ParentMood';
-// import ParentProfessionals from './pages/parent/ParentProfessionals';
+import ParentProfessionals from './pages/parent/ParentProfessionals';
 import ParentProfile from './pages/parent/ParentProfile';
 
 import './App.css';
@@ -112,7 +112,7 @@ function App() {
             <Route path="factures" element={<ParentInvoices />} /> 
             <Route path="factures/:id" element={<ParentInvoiceDetail />} /> 
             {/* <Route path="mood" element={<ParentMood />} /> */}
-            {/* <Route path="professionnels" element={<ParentProfessionals />} /> */}
+            <Route path="professionnels" element={<ParentProfessionals />} /> 
             <Route path="profil" element={<ParentProfile />} /> 
           </Route>
 
