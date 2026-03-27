@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { Send, ArrowLeft } from 'lucide-react';
@@ -18,10 +18,15 @@ export default function ParentConversation() {
   const { id } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromPro = new URLSearchParams(location.search).get('from') === 'pro';
+  const proId = new URLSearchParams(location.search).get('proId');
+  const proName = new URLSearchParams(location.search).get('proName');
   const [messages, setMessages] = useState([]);
   const [content, setContent] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [convProName, setConvProName] = useState('');
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -35,6 +40,8 @@ export default function ParentConversation() {
   const loadMessages = async () => {
     const { data } = await supabase.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: true });
     setMessages(data || []);
+    const { data: conv } = await supabase.from('conversations').select('pro_name').eq('id', id).maybeSingle();
+    if (conv?.pro_name) setConvProName(conv.pro_name);
     setLoading(false);
   };
 
@@ -74,13 +81,13 @@ export default function ParentConversation() {
     <div className="flex flex-col" style={{ height: 'calc(100vh - 80px)' }}>
       {/* Header */}
       <div className="px-5 py-3 bg-white border-b border-stone-100 flex items-center gap-3 flex-shrink-0">
-        <button onClick={() => navigate('/parent/messages')} className="text-slate-400 hover:text-slate-600">
+        <button onClick={() => fromPro ? navigate(`/parent/professionnels/${proId}`) : navigate('/parent/messages')} className="text-slate-400 hover:text-slate-600">
           <ArrowLeft size={20} />
         </button>
         <div className="w-10 h-10 rounded-2xl bg-sage-100 flex items-center justify-center">
           <span className="text-sage-600 font-heading font-bold text-sm">P</span>
         </div>
-        <p className="font-heading font-semibold text-sm text-slate-800">Conversation</p>
+        <p className="font-heading font-semibold text-sm text-slate-800">{proName ? decodeURIComponent(proName) : convProName || 'Conversation'}</p>
       </div>
 
       {/* Messages */}

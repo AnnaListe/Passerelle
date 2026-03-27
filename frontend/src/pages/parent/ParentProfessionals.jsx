@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { Plus, Search, X, Users, Phone, Mail, CheckCircle, UserPlus } from 'lucide-react';
@@ -23,6 +24,7 @@ const PROFESSION_TO_MEDICAL = {
 export default function ParentProfessionals() {
   const { user } = useAuth();
   const [childId, setChildId] = useState(null);
+  const navigate = useNavigate();
   const [professionals, setProfessionals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -183,7 +185,7 @@ export default function ParentProfessionals() {
       ) : (
         <div className="space-y-3">
           {professionals.map(pro => (
-            <div key={pro.id} className="passerelle-card">
+            <div key={pro.id} className="passerelle-card cursor-pointer" onClick={() => navigate(`/parent/professionnels/${pro.id}`)}>
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-heading font-bold text-base flex-shrink-0"
                   style={{ backgroundColor: '#4A9B8F' }}>

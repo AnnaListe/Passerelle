@@ -119,7 +119,7 @@ export default function ParentMessages() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-heading font-semibold text-sm text-slate-700">
-                  {conv.children ? `${conv.children.first_name} ${conv.children.last_name}` : 'Conversation'}
+                  {conv.pro_name || (conv.children ? `${conv.children?.first_name} ${conv.children?.last_name}` : 'Conversation')}
                 </p>
                 <p className="text-xs text-slate-400 font-body">{formatRelative(conv.last_message_at)}</p>
               </div>
