@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import {
   ArrowLeft, MessageCircle, Phone, Mail, Calendar, FileText,
-  Receipt, ChevronRight, Plus, Clock, MapPin, Download
+  Receipt, ChevronRight, Plus, Clock, MapPin, Download, X
 } from 'lucide-react';
 import { format, isSameDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -24,6 +24,8 @@ const APT_COLORS = {
   'autre': { bg: '#F5F5F4', text: '#57534E', dot: '#94A3B8' },
 };
 
+
+
 export default function ParentProfessionalDetail() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -35,6 +37,19 @@ export default function ParentProfessionalDetail() {
   const [invoices, setInvoices] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showAddApt, setShowAddApt] = useState(false);
+  const [aptForm, setAptForm] = useState({
+    title: '',
+    appointment_type: 'seance',
+    date: '',
+    start_time: '',
+    end_time: '',
+    location: '',
+    is_recurring: false,
+    day_of_week: 'lundi',
+    end_date: '',
+  });
+const [savingApt, setSavingApt] = useState(false);
   const [activeTab, setActiveTab] = useState('planning');
 
   useEffect(() => {
@@ -71,6 +86,29 @@ export default function ParentProfessionalDetail() {
             .order('start_datetime', { ascending: false })
             .limit(10);
           setAppointments(apts || []);
+        } else {
+          // Pro non inscrit sur Passerelle — chercher par child_id et created_by parent
+          const { data: apts } = await supabase
+            .from('appointments')
+            .select('*')
+            .eq('child_id', link.child_id)
+            .eq('created_by', 'parent')
+            .order('start_datetime', { ascending: false })
+            .limit(10);
+          setAppointments(apts || []);
+        }
+
+        
+        // Charger les RDV de ce pro pour cet enfant
+        if (proData?.professional_id) {
+          const { data: apts } = await supabase
+            .from('appointments')
+            .select('*')
+            .eq('child_id', link.child_id)
+            .eq('professional_id', proData.professional_id)
+            .order('start_datetime', { ascending: false })
+            .limit(10);
+          setAppointments(apts || []);
 
           // Factures
           const { data: invs } = await supabase
@@ -89,6 +127,16 @@ export default function ParentProfessionalDetail() {
             .eq('professional_id', proData.professional_id)
             .order('created_at', { ascending: false });
           setContracts(cons || []);
+        } else {
+          // Pro non inscrit sur Passerelle
+          const { data: apts } = await supabase
+            .from('appointments')
+            .select('*')
+            .eq('child_id', link.child_id)
+            .eq('created_by', 'parent')
+            .order('start_datetime', { ascending: false })
+            .limit(10);
+          setAppointments(apts || []);
         }
 
         // Documents
@@ -103,6 +151,63 @@ export default function ParentProfessionalDetail() {
       console.error('Error loading pro detail:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const addAppointment = async () => {
+    console.log('addAppointment called', { childId, aptForm, pro });
+    if (!aptForm.date || !aptForm.start_time || !aptForm.end_time || !aptForm.title) return;
+    setSavingApt(true);
+    try {
+      if (aptForm.is_recurring) {
+        const dayMap = { lundi:1, mardi:2, mercredi:3, jeudi:4, vendredi:5, samedi:6, dimanche:0 };
+        const targetDay = dayMap[aptForm.day_of_week];
+        const startDate = new Date(aptForm.date);
+        const endDate = aptForm.end_date ? new Date(aptForm.end_date) : new Date(startDate.getFullYear(), startDate.getMonth() + 3, startDate.getDate());
+        const recurringId = crypto.randomUUID();
+        const aptList = [];
+        const current = new Date(startDate);
+        let daysToAdd = (targetDay - current.getDay() + 7) % 7;
+        current.setDate(current.getDate() + daysToAdd);
+        while (current <= endDate) {
+          const dateStr = `${current.getFullYear()}-${String(current.getMonth()+1).padStart(2,'0')}-${String(current.getDate()).padStart(2,'0')}`;
+          aptList.push({
+            child_id: childId,
+            professional_id: pro.professional_id || null,
+            title: aptForm.title,
+            appointment_type: aptForm.appointment_type,
+            start_datetime: `${dateStr}T${aptForm.start_time}:00`,
+            end_datetime: `${dateStr}T${aptForm.end_time}:00`,
+            location: aptForm.location || null,
+            recurring_id: recurringId,
+            is_recurring: true,
+            status: 'confirme',
+            created_by: 'parent',
+          });
+          current.setDate(current.getDate() + 7);
+        }
+        await supabase.from('appointments').insert(aptList);
+      } else {
+        await supabase.from('appointments').insert({
+          child_id: childId,
+          professional_id: pro.professional_id || null,
+          title: aptForm.title,
+          appointment_type: aptForm.appointment_type,
+          start_datetime: `${aptForm.date}T${aptForm.start_time}:00`,
+          end_datetime: `${aptForm.date}T${aptForm.end_time}:00`,
+          location: aptForm.location || null,
+          is_recurring: false,
+          status: 'confirme',
+          created_by: 'parent',
+        });
+      }
+      setShowAddApt(false);
+      setAptForm({ title: '', appointment_type: 'seance', date: '', start_time: '', end_time: '', location: '', is_recurring: false, day_of_week: 'lundi', end_date: '' });
+      loadData();
+    } catch (error) {
+      console.error('Error adding appointment:', error);
+    } finally {
+      setSavingApt(false);
     }
   };
 
@@ -333,6 +438,13 @@ export default function ParentProfessionalDetail() {
               </div>
             )}
 
+            <button
+              onClick={() => setShowAddApt(true)}
+              className="w-full h-11 rounded-2xl font-heading font-semibold text-sm flex items-center justify-center gap-2 mb-4"
+              style={{ backgroundColor: '#4A9B8F', color: 'white' }}>
+              <Plus size={16} /> Ajouter un rendez-vous
+            </button>
+
             {appointments.length === 0 && (
               <div className="text-center py-12">
                 <Calendar size={28} className="mx-auto mb-3 text-slate-300" />
@@ -430,6 +542,101 @@ export default function ParentProfessionalDetail() {
           </div>
         )}
       </div>
+
+      {showAddApt && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-[480px] bg-white rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-heading font-bold text-lg text-slate-800">Nouveau rendez-vous</h3>
+              <button onClick={() => setShowAddApt(false)} className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center">
+                <X size={16} className="text-slate-500" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-heading font-bold uppercase tracking-widest text-slate-400 mb-1">Titre *</label>
+                <input type="text" value={aptForm.title} onChange={e => setAptForm(p => ({...p, title: e.target.value}))}
+                  placeholder="Ex: Séance orthophonie" className="w-full h-11 px-4 bg-stone-50 border border-stone-200 rounded-xl text-sm font-body" />
+              </div>
+              <div>
+                <label className="block text-xs font-heading font-bold uppercase tracking-widest text-slate-400 mb-1">Type</label>
+                <select value={aptForm.appointment_type} onChange={e => setAptForm(p => ({...p, appointment_type: e.target.value}))}
+                  className="w-full h-11 px-4 bg-stone-50 border border-stone-200 rounded-xl text-sm font-body">
+                  <option value="seance">Séance</option>
+                  <option value="bilan">Bilan</option>
+                  <option value="reunion">Réunion</option>
+                  <option value="autre">Autre</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-3 py-2">
+                <input type="checkbox" id="recurring" checked={aptForm.is_recurring}
+                  onChange={e => setAptForm(p => ({...p, is_recurring: e.target.checked}))}
+                  className="w-4 h-4 rounded" />
+                <label htmlFor="recurring" className="text-sm font-heading font-semibold text-slate-600">Rendez-vous récurrent</label>
+              </div>
+              {aptForm.is_recurring ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-heading font-bold uppercase tracking-widest text-slate-400 mb-1">Jour de la semaine</label>
+                    <select value={aptForm.day_of_week} onChange={e => setAptForm(p => ({...p, day_of_week: e.target.value}))}
+                      className="w-full h-11 px-4 bg-stone-50 border border-stone-200 rounded-xl text-sm font-body">
+                      {['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'].map(d => (
+                        <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-heading font-bold uppercase tracking-widest text-slate-400 mb-1">Début récurrence</label>
+                      <input type="date" value={aptForm.date} onChange={e => setAptForm(p => ({...p, date: e.target.value}))}
+                        className="w-full h-11 px-4 bg-stone-50 border border-stone-200 rounded-xl text-sm font-body" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-heading font-bold uppercase tracking-widest text-slate-400 mb-1">Fin récurrence</label>
+                      <input type="date" value={aptForm.end_date} onChange={e => setAptForm(p => ({...p, end_date: e.target.value}))}
+                        className="w-full h-11 px-4 bg-stone-50 border border-stone-200 rounded-xl text-sm font-body" />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="block text-xs font-heading font-bold uppercase tracking-widest text-slate-400 mb-1">Date *</label>
+                  <input type="date" value={aptForm.date} onChange={e => setAptForm(p => ({...p, date: e.target.value}))}
+                    className="w-full h-11 px-4 bg-stone-50 border border-stone-200 rounded-xl text-sm font-body" />
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-heading font-bold uppercase tracking-widest text-slate-400 mb-1">Heure début *</label>
+                  <input type="time" value={aptForm.start_time} onChange={e => setAptForm(p => ({...p, start_time: e.target.value}))}
+                    className="w-full h-11 px-4 bg-stone-50 border border-stone-200 rounded-xl text-sm font-body" />
+                </div>
+                <div>
+                  <label className="block text-xs font-heading font-bold uppercase tracking-widest text-slate-400 mb-1">Heure fin *</label>
+                  <input type="time" value={aptForm.end_time} onChange={e => setAptForm(p => ({...p, end_time: e.target.value}))}
+                    className="w-full h-11 px-4 bg-stone-50 border border-stone-200 rounded-xl text-sm font-body" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-heading font-bold uppercase tracking-widest text-slate-400 mb-1">Lieu</label>
+                <input type="text" value={aptForm.location} onChange={e => setAptForm(p => ({...p, location: e.target.value}))}
+                  placeholder="Ex: Cabinet rue de la Paix" className="w-full h-11 px-4 bg-stone-50 border border-stone-200 rounded-xl text-sm font-body" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setShowAddApt(false)}
+                className="flex-1 h-11 bg-stone-100 text-slate-600 rounded-2xl font-heading font-semibold text-sm">
+                Annuler
+              </button>
+              <button onClick={addAppointment} disabled={savingApt || !aptForm.title || !aptForm.date || !aptForm.start_time || !aptForm.end_time}
+                className="flex-1 h-11 rounded-2xl font-heading font-semibold text-sm disabled:opacity-40"
+                style={{ backgroundColor: '#4A9B8F', color: 'white' }}>
+                {savingApt ? '...' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
