@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { FileText, Upload, Plus, X, Download } from 'lucide-react';
+import { FileText, Upload, Plus, X, Download, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -34,6 +34,12 @@ export default function ParentDocuments() {
   const [childId, setChildId] = useState(null);
   const [uploadData, setUploadData] = useState({ title: '', category: 'autre', file: null });
   const [uploading, setUploading] = useState(false);
+  const [showAccessModal, setShowAccessModal] = useState(false);
+  const [docForAccess, setDocForAccess] = useState(null);
+  const [linkedPros, setLinkedPros] = useState([]);
+  const [selectedPros, setSelectedPros] = useState([]);
+  const [savingAccess, setSavingAccess] = useState(false);
+  const [docAccess, setDocAccess] = useState({});
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -47,6 +53,19 @@ export default function ParentDocuments() {
         setChildId(link.child_id);
         const { data: docs } = await supabase.from('documents').select('*').eq('child_id', link.child_id).order('created_at', { ascending: false });
         setDocuments(docs || []);
+
+        const { data: pros } = await supabase.from('child_professionals').select('*').eq('child_id', link.child_id);
+        setLinkedPros(pros || []);
+
+        if (docs?.length > 0) {
+          const { data: access } = await supabase.from('document_access').select('*').in('document_id', docs.map(d => d.id));
+          const accessMap = {};
+          (access || []).forEach(a => {
+            if (!accessMap[a.document_id]) accessMap[a.document_id] = [];
+            accessMap[a.document_id].push(a.professional_id || a.professional_name);
+          });
+          setDocAccess(accessMap);
+        }
       }
     } catch (error) {
       console.error('Error loading documents:', error);
@@ -61,10 +80,9 @@ export default function ParentDocuments() {
     try {
       const ext = uploadData.file.name.split('.').pop();
       const fileName = `doc-${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from('avatar').upload(fileName, uploadData.file, { upsert: true });
+      const { error: uploadError } = await supabase.storage.from('documents').upload(fileName, uploadData.file, { upsert: true });
       if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from('avatar').getPublicUrl(fileName);
-
+      const { data: urlData } = supabase.storage.from('documents').getPublicUrl(fileName);
       await supabase.from('documents').insert({
         child_id: childId,
         title: uploadData.title,
@@ -74,7 +92,6 @@ export default function ParentDocuments() {
         file_name: uploadData.file.name,
         created_at: new Date().toISOString(),
       });
-
       setShowUpload(false);
       setUploadData({ title: '', category: 'autre', file: null });
       loadData();
@@ -82,6 +99,35 @@ export default function ParentDocuments() {
       console.error('Error uploading:', error);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const saveAccess = async () => {
+    if (!docForAccess) return;
+    setSavingAccess(true);
+    try {
+      await supabase.from('document_access').delete().eq('document_id', docForAccess.id);
+      if (selectedPros.length > 0) {
+        await supabase.from('document_access').insert(
+          selectedPros.map(proId => {
+            const pro = linkedPros.find(p => p.id === proId);
+            return {
+              document_id: docForAccess.id,
+              professional_id: pro?.professional_id || null,
+              professional_name: pro?.professional_name,
+              granted_by: user.id,
+            };
+          })
+        );
+      }
+      setShowAccessModal(false);
+      setDocForAccess(null);
+      setSelectedPros([]);
+      loadData();
+    } catch (error) {
+      console.error('Error saving access:', error);
+    } finally {
+      setSavingAccess(false);
     }
   };
 
@@ -100,10 +146,9 @@ export default function ParentDocuments() {
           <h1 className="page-title">Documents</h1>
           <p className="text-sm text-slate-400 font-body mt-0.5">{filteredDocs.length} document{filteredDocs.length > 1 ? 's' : ''}</p>
         </div>
-        <button
-          onClick={() => setShowUpload(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-sage-500 text-white rounded-full font-heading font-semibold text-sm shadow-sage"
-        >
+        <button onClick={() => setShowUpload(true)}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-full font-heading font-semibold text-sm"
+          style={{ backgroundColor: '#4A9B8F', color: 'white' }}>
           <Plus size={15} /> Déposer
         </button>
       </div>
@@ -111,11 +156,9 @@ export default function ParentDocuments() {
       {/* Filtres */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-4" style={{ scrollbarWidth: 'none' }}>
         {CATEGORIES.map(cat => (
-          <button
-            key={cat.key}
-            onClick={() => setCategory(cat.key)}
-            className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-heading font-semibold border ${category === cat.key ? 'bg-sage-500 text-white border-sage-500 shadow-sage' : 'bg-white text-slate-500 border-stone-200'}`}
-          >
+          <button key={cat.key} onClick={() => setCategory(cat.key)}
+            className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-heading font-semibold border ${category === cat.key ? 'text-white border-transparent' : 'bg-white text-slate-500 border-stone-200'}`}
+            style={category === cat.key ? { backgroundColor: '#4A9B8F' } : {}}>
             {cat.label}
           </button>
         ))}
@@ -129,7 +172,8 @@ export default function ParentDocuments() {
           </div>
           <p className="font-heading font-semibold text-slate-500">Aucun document</p>
           <p className="text-sm text-slate-400 font-body mt-1">Déposez vos documents importants ici</p>
-          <button onClick={() => setShowUpload(true)} className="mt-4 px-5 py-2.5 bg-sage-500 text-white rounded-full font-heading font-semibold text-sm shadow-sage">
+          <button onClick={() => setShowUpload(true)} className="mt-4 px-5 py-2.5 rounded-full font-heading font-semibold text-sm"
+            style={{ backgroundColor: '#4A9B8F', color: 'white' }}>
             Déposer un document
           </button>
         </div>
@@ -138,6 +182,7 @@ export default function ParentDocuments() {
           {filteredDocs.map(doc => {
             const colors = CATEGORY_COLORS[doc.category || doc.type] || CATEGORY_COLORS['autre'];
             const date = doc.created_at ? format(new Date(doc.created_at), 'd MMM yyyy', { locale: fr }) : '';
+            const accessCount = (docAccess[doc.id] || []).length;
             return (
               <div key={doc.id} className="passerelle-card flex items-start gap-4">
                 <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: colors.bg }}>
@@ -145,29 +190,100 @@ export default function ParentDocuments() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-heading font-semibold text-sm text-slate-800 leading-tight">{doc.title}</p>
-                  <div className="flex items-center gap-2 mt-1.5">
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     <span className="text-[11px] font-heading font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: colors.bg, color: colors.text }}>
                       {doc.category || doc.type || 'autre'}
                     </span>
                     <span className="text-xs text-slate-400 font-body">{date}</span>
+                    {accessCount > 0 && (
+                      <span className="text-[11px] font-heading font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-500">
+                        {accessCount} pro{accessCount > 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                 </div>
-                {doc.file_url && (
-                  <a href={doc.file_url} target="_blank" rel="noreferrer"
-                    className="w-9 h-9 rounded-xl bg-sage-50 flex items-center justify-center text-sage-600 flex-shrink-0">
-                    <Download size={16} />
-                  </a>
-                )}
+                <div className="flex gap-1 flex-shrink-0">
+                  {doc.file_url && (
+                    <a href={doc.file_url} target="_blank" rel="noreferrer"
+                      className="w-9 h-9 rounded-xl bg-sage-50 flex items-center justify-center text-sage-600">
+                      <Download size={16} />
+                    </a>
+                  )}
+                  <button
+                    onClick={() => {
+                      setDocForAccess(doc);
+                      const existing = docAccess[doc.id] || [];
+                      setSelectedPros(linkedPros.filter(p => existing.includes(p.professional_id || p.professional_name)).map(p => p.id));
+                      setShowAccessModal(true);
+                    }}
+                    className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-500"
+                    title="Gérer les accès">
+                    <Users size={14} />
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
       )}
 
+      {/* Modal accès */}
+      {showAccessModal && docForAccess && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-[480px] bg-white rounded-3xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-heading font-bold text-lg text-slate-800">Autoriser l'accès</h3>
+              <button onClick={() => setShowAccessModal(false)} className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center">
+                <X size={16} className="text-slate-500" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 font-body mb-4 truncate">{docForAccess.title}</p>
+            {linkedPros.length === 0 ? (
+              <p className="text-sm text-slate-400 font-body text-center py-4">Aucun professionnel dans l'équipe</p>
+            ) : (
+              <div className="space-y-2 mb-5">
+                {linkedPros.map(pro => (
+                  <button key={pro.id}
+                    onClick={() => setSelectedPros(prev =>
+                      prev.includes(pro.id) ? prev.filter(id => id !== pro.id) : [...prev, pro.id]
+                    )}
+                    className={`w-full p-3 rounded-2xl border-2 text-left flex items-center gap-3 transition-all ${selectedPros.includes(pro.id) ? 'border-sage-400 bg-sage-50' : 'border-stone-200 bg-white'}`}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-heading font-bold text-sm flex-shrink-0"
+                      style={{ backgroundColor: '#4A9B8F' }}>
+                      {pro.professional_name?.[0]}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-heading font-semibold text-sm text-slate-700">{pro.professional_name}</p>
+                      <p className="text-xs text-slate-400 font-body">{pro.profession}</p>
+                    </div>
+                    {selectedPros.includes(pro.id) && (
+                      <div className="w-5 h-5 rounded-full bg-sage-500 flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-xs">✓</span>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button onClick={() => setShowAccessModal(false)}
+                className="flex-1 h-11 bg-stone-100 text-slate-600 rounded-2xl font-heading font-semibold text-sm">
+                Annuler
+              </button>
+              <button onClick={saveAccess} disabled={savingAccess}
+                className="flex-1 h-11 rounded-2xl font-heading font-semibold text-sm disabled:opacity-40"
+                style={{ backgroundColor: '#4A9B8F', color: 'white' }}>
+                {savingAccess ? '...' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal upload */}
       {showUpload && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end justify-center">
-          <div className="w-full max-w-[480px] bg-white rounded-t-3xl p-6">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-[480px] bg-white rounded-3xl p-6 overflow-y-auto max-h-[85vh]">
             <div className="flex items-center justify-between mb-5">
               <h3 className="font-heading font-bold text-lg text-slate-800">Déposer un document</h3>
               <button onClick={() => setShowUpload(false)} className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center">
@@ -207,7 +323,8 @@ export default function ParentDocuments() {
               </div>
             </div>
             <button onClick={handleUpload} disabled={uploading || !uploadData.title || !uploadData.file}
-              className="w-full mt-5 h-12 bg-sage-500 text-white rounded-2xl font-heading font-semibold disabled:opacity-40 shadow-sage flex items-center justify-center gap-2">
+              className="w-full mt-5 h-12 rounded-2xl font-heading font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+              style={{ backgroundColor: '#4A9B8F', color: 'white' }}>
               {uploading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Upload size={16} />}
               Déposer le document
             </button>
