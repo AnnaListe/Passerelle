@@ -51,6 +51,8 @@ export default function ParentProfessionalDetail() {
   });
 const [savingApt, setSavingApt] = useState(false);
   const [activeTab, setActiveTab] = useState('planning');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [aptToDelete, setAptToDelete] = useState(null);
 
   useEffect(() => {
     if (user) loadData();
@@ -263,6 +265,20 @@ const [savingApt, setSavingApt] = useState(false);
     { key: 'factures', label: 'Factures', count: invoices.length },
   ];
 
+  const deleteAppointment = async (aptId) => {
+    await supabase.from('appointments').delete().eq('id', aptId);
+    setShowDeleteModal(false);
+    setAptToDelete(null);
+    loadData();
+  };
+
+  const deleteSeries = async (recurringId) => {
+    await supabase.from('appointments').delete().eq('recurring_id', recurringId);
+    setShowDeleteModal(false);
+    setAptToDelete(null);
+    loadData();
+  };
+
   return (
     <div className="pb-6">
       {/* Header */}
@@ -378,29 +394,33 @@ const [savingApt, setSavingApt] = useState(false);
                   {upcomingApts.map(apt => {
                     const colors = APT_COLORS[apt.appointment_type] || APT_COLORS['autre'];
                     return (
-                      <div key={apt.id} className="rounded-2xl p-4 flex items-start gap-3"
-                        style={{ backgroundColor: colors.bg }}>
-                        <div className="w-3 h-3 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: colors.dot }} />
-                        <div className="flex-1">
-                          <p className="font-heading font-semibold text-sm" style={{ color: colors.text }}>{apt.title}</p>
-                          <div className="flex items-center gap-3 mt-1">
-                            <div className="flex items-center gap-1 text-xs text-slate-500 font-body">
-                              <Calendar size={11} />
-                              {formatDate(apt.start_datetime)}
-                            </div>
-                            <div className="flex items-center gap-1 text-xs text-slate-500 font-body">
-                              <Clock size={11} />
-                              {formatTime(apt.start_datetime)} – {formatTime(apt.end_datetime)}
-                            </div>
+                     <div key={apt.id} className="rounded-2xl p-4 flex items-start gap-3"
+                      style={{ backgroundColor: colors.bg }}>
+                      <div className="w-3 h-3 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: colors.dot }} />
+                      <div className="flex-1">
+                        <p className="font-heading font-semibold text-sm" style={{ color: colors.text }}>{apt.title}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <div className="flex items-center gap-1 text-xs text-slate-500 font-body">
+                            <Calendar size={11} />
+                            {formatDate(apt.start_datetime)}
                           </div>
-                          {apt.location && (
-                            <div className="flex items-center gap-1 text-xs text-slate-400 font-body mt-0.5">
-                              <MapPin size={11} />
-                              {apt.location}
-                            </div>
-                          )}
+                          <div className="flex items-center gap-1 text-xs text-slate-500 font-body">
+                            <Clock size={11} />
+                            {formatTime(apt.start_datetime)} – {formatTime(apt.end_datetime)}
+                          </div>
                         </div>
+                        {apt.location && (
+                          <div className="flex items-center gap-1 text-xs text-slate-400 font-body mt-0.5">
+                            <MapPin size={11} />
+                            {apt.location}
+                          </div>
+                        )}
                       </div>
+                      <button onClick={() => { setAptToDelete(apt); setShowDeleteModal(true); }}
+                        className="text-slate-300 hover:text-red-400 flex-shrink-0">
+                        <X size={16} />
+                      </button>
+                    </div>
                     );
                   })}
                 </div>
@@ -542,6 +562,31 @@ const [savingApt, setSavingApt] = useState(false);
           </div>
         )}
       </div>
+
+      {showDeleteModal && aptToDelete && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-[380px] bg-white rounded-3xl p-6">
+            <h3 className="font-heading font-bold text-lg text-slate-800 mb-2">Supprimer ce RDV ?</h3>
+            <p className="text-sm text-slate-500 font-body mb-5">{aptToDelete.title}</p>
+            <div className="space-y-2">
+              <button onClick={() => deleteAppointment(aptToDelete.id)}
+                className="w-full h-11 bg-red-50 text-red-500 rounded-2xl font-heading font-semibold text-sm border border-red-100">
+                Supprimer ce RDV uniquement
+              </button>
+              {aptToDelete.is_recurring && (
+                <button onClick={() => deleteSeries(aptToDelete.recurring_id)}
+                  className="w-full h-11 bg-red-500 text-white rounded-2xl font-heading font-semibold text-sm">
+                  Supprimer toute la série
+                </button>
+              )}
+              <button onClick={() => { setShowDeleteModal(false); setAptToDelete(null); }}
+                className="w-full h-11 bg-stone-100 text-slate-600 rounded-2xl font-heading font-semibold text-sm">
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddApt && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
