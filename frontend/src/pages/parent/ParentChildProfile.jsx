@@ -122,6 +122,8 @@ export default function ParentChildProfile() {
   const [editingAdditionalInfo, setEditingAdditionalInfo] = useState(false);
 
   const [weeklySchedule, setWeeklySchedule] = useState([]);
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [scheduleEdit, setScheduleEdit] = useState([]);
 
   const [showCreateChild, setShowCreateChild] = useState(false);
   const [newChild, setNewChild] = useState({ first_name: '', last_name: '', birth_date: '' });
@@ -249,6 +251,65 @@ export default function ParentChildProfile() {
     }
   };
 
+  const saveSchedule = async () => {
+    setSaving(true);
+    try {
+      await supabase.from('child_weekly_schedule').delete().eq('child_id', childId);
+      if (scheduleEdit.length > 0) {
+        await supabase.from('child_weekly_schedule').insert(
+          scheduleEdit.map(s => ({
+            child_id: childId,
+            day_of_week: s.day_of_week,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            label: s.label,
+            category: s.category,
+            location: s.location || null,
+          }))
+        );
+      }
+      const { data: newSched } = await supabase.from('child_weekly_schedule').select('*').eq('child_id', childId).order('day_of_week');
+      setWeeklySchedule(newSched || []);
+      setEditingSchedule(false);
+      setMessage('Emploi du temps enregistré !');
+      setTimeout(() => setMessage(''), 2000);
+    } catch (error) {
+      console.error('Error saving schedule:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addScheduleEntry = () => {
+    setScheduleEdit(prev => [...prev, {
+      id: `new-${Date.now()}`,
+      day_of_week: 'lundi',
+      start_time: '09:00',
+      end_time: '10:00',
+      label: '',
+      category: 'école',
+      location: '',
+    }]);
+  };
+
+  const updateScheduleEntry = (index, field, value) => {
+    setScheduleEdit(prev => prev.map((s, i) => i === index ? {...s, [field]: value} : s));
+  };
+
+  const removeScheduleEntry = (index) => {
+    setScheduleEdit(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const duplicateScheduleEntry = (index, targetDays) => {
+    const entry = scheduleEdit[index];
+    const newEntries = targetDays.map(day => ({
+      ...entry,
+      id: `new-${Date.now()}-${day}`,
+      day_of_week: day,
+    }));
+    setScheduleEdit(prev => [...prev, ...newEntries]);
+  };
+
   if (loading) return (
     <div className="p-5 space-y-4">
       {[1,2,3,4].map(i => <div key={i} className="h-20 bg-stone-100 rounded-3xl animate-pulse" />)}
@@ -293,7 +354,7 @@ export default function ParentChildProfile() {
           Annuler
         </button>
         <button onClick={createChild} disabled={creatingChild || !newChild.first_name || !newChild.last_name || !newChild.birth_date}
-          className="flex-1 h-11 bg-sage-500 text-white rounded-2xl font-heading font-semibold text-sm shadow-sage disabled:opacity-40">
+          className="flex-1 h-11 rounded-2xl font-heading font-semibold text-sm disabled:opacity-40" style={{backgroundColor: '#4A9B8F', color: 'white'}}>
           {creatingChild ? '...' : 'Créer le dossier'}
         </button>
       </div>
@@ -378,6 +439,117 @@ export default function ParentChildProfile() {
         </div>
         <TextField label="Description / notes" value={schooling.schooling_description} editValue={schoolingEdit.schooling_description} editing={editingSchooling} onChange={v => setSchoolingEdit(p => ({...p, schooling_description: v}))} multiline />
       </Section>
+
+      {/* Emploi du temps */}
+<div className="passerelle-card">
+  <button onClick={() => { const s = !editingSchedule; if(s) setScheduleEdit([...weeklySchedule]); setEditingSchedule(s); }} className="w-full flex items-center justify-between">
+    <div className="flex items-center gap-2">
+      <span className="text-base">📅</span>
+      <h3 className="font-heading font-semibold text-slate-700 text-base">Emploi du temps</h3>
+    </div>
+    <ChevronDown size={18} className="text-slate-400" />
+  </button>
+
+  {editingSchedule && (
+    <div className="mt-4 border-t border-stone-50 pt-4 space-y-3">
+      {scheduleEdit.length === 0 ? (
+        <p className="text-sm text-slate-400 font-body italic text-center py-4">Aucun créneau — cliquez sur Ajouter</p>
+      ) : (
+        [...scheduleEdit].sort((a, b) => {
+          const order = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+          return order.indexOf(a.day_of_week) - order.indexOf(b.day_of_week);
+        }).map((entry) => {
+          const index = scheduleEdit.findIndex(e => e.id === entry.id);
+          return (
+            <div key={entry.id} className="p-3 bg-stone-50 rounded-2xl space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <select value={entry.day_of_week} onChange={e => updateScheduleEntry(index, 'day_of_week', e.target.value)}
+                  className="h-9 px-3 bg-white border border-stone-200 rounded-xl text-sm font-body">
+                  {['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'].map(d => (
+                    <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>
+                  ))}
+                </select>
+                <select value={entry.category} onChange={e => updateScheduleEntry(index, 'category', e.target.value)}
+                  className="h-9 px-3 bg-white border border-stone-200 rounded-xl text-sm font-body">
+                  <option value="école">🏫 École</option>
+                  <option value="sport">🏃 Sport</option>
+                  <option value="créatif">🎨 Créatif</option>
+                  <option value="soin">🏥 Séance</option>
+                  <option value="autre">🌟 Autre</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="time" value={entry.start_time} onChange={e => updateScheduleEntry(index, 'start_time', e.target.value)}
+                  className="h-9 px-3 bg-white border border-stone-200 rounded-xl text-sm font-body" />
+                <input type="time" value={entry.end_time} onChange={e => updateScheduleEntry(index, 'end_time', e.target.value)}
+                  className="h-9 px-3 bg-white border border-stone-200 rounded-xl text-sm font-body" />
+              </div>
+              <input type="text" value={entry.label} onChange={e => updateScheduleEntry(index, 'label', e.target.value)}
+                placeholder="Libellé (ex: CM2 école Jules Ferry)" className="w-full h-9 px-3 bg-white border border-stone-200 rounded-xl text-sm font-body" />
+              <div className="flex flex-wrap gap-1 pt-1">
+                <p className="text-xs text-slate-400 w-full">Dupliquer vers :</p>
+                {['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
+                  .filter(d => d !== entry.day_of_week)
+                  .map(day => (
+                    <button key={day} type="button" onClick={() => duplicateScheduleEntry(index, [day])}
+                      className="text-xs px-2 py-1 bg-sage-50 text-sage-600 rounded-lg border border-sage-200 capitalize">
+                      {day.slice(0,3)}
+                    </button>
+                  ))
+                }
+                <button onClick={() => removeScheduleEntry(index)}
+                  className="ml-auto text-xs px-2 py-1 bg-red-50 text-red-400 rounded-lg border border-red-100">
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          );
+        })
+      )}
+      <button onClick={addScheduleEntry}
+        className="w-full py-3 border-2 border-dashed border-stone-200 rounded-2xl text-slate-400 font-heading font-semibold text-sm hover:border-sage-300 hover:text-sage-600">
+        + Ajouter un créneau
+      </button>
+      <div className="flex gap-3">
+        <button onClick={() => setEditingSchedule(false)} className="flex-1 h-11 bg-stone-100 text-slate-600 rounded-2xl font-heading font-semibold text-sm">
+          Annuler
+        </button>
+        <button onClick={saveSchedule} disabled={saving} className="flex-1 h-11 bg-sage-500 text-white rounded-2xl font-heading font-semibold text-sm shadow-sage disabled:opacity-40">
+          {saving ? '...' : 'Enregistrer'}
+        </button>
+      </div>
+    </div>
+  )}
+
+  {!editingSchedule && weeklySchedule.length > 0 && (
+    <div className="mt-4 border-t border-stone-50 pt-3 space-y-2">
+      {[...weeklySchedule].sort((a,b) => {
+        const order = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+        return order.indexOf(a.day_of_week) - order.indexOf(b.day_of_week);
+      }).map((item, i) => (
+        <div key={i} className="flex items-center gap-3 px-3 py-2 bg-stone-50 rounded-xl">
+          <span className="text-xs font-heading font-semibold text-slate-500 w-16 capitalize">{item.day_of_week.slice(0,3)}</span>
+          <span className="text-xs text-slate-400 font-body">{item.start_time?.slice(0,5)} – {item.end_time?.slice(0,5)}</span>
+          <span className="text-xs font-body text-slate-600 flex-1 truncate">{item.label}</span>
+        </div>
+      ))}
+      <button onClick={() => { setScheduleEdit([...weeklySchedule]); setEditingSchedule(true); }}
+        className="text-sage-600 font-heading font-semibold text-sm mt-2">
+        Modifier l'emploi du temps
+      </button>
+    </div>
+  )}
+
+  {!editingSchedule && weeklySchedule.length === 0 && (
+    <div className="mt-4 border-t border-stone-50 pt-3 text-center">
+      <p className="text-sm text-slate-400 font-body italic mb-2">Aucun créneau</p>
+      <button onClick={() => { setScheduleEdit([]); setEditingSchedule(true); }}
+        className="text-sage-600 font-heading font-semibold text-sm">
+        + Ajouter des créneaux
+      </button>
+    </div>
+  )}
+</div>
 
       {/* Section 2bis — Médical */}
       <Section title="Suivi médical & paramédical" icon="💊"
