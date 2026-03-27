@@ -53,6 +53,10 @@ const [savingApt, setSavingApt] = useState(false);
   const [activeTab, setActiveTab] = useState('planning');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [aptToDelete, setAptToDelete] = useState(null);
+  const [showImprevuModal, setShowImprevuModal] = useState(false);
+  const [aptImprevu, setAptImprevu] = useState(null);
+  const [imprevuForm, setImprevuForm] = useState({ type: 'report', comment: '' });
+  const [savingImprevu, setSavingImprevu] = useState(false);
 
   useEffect(() => {
     if (user) loadData();
@@ -279,6 +283,29 @@ const [savingApt, setSavingApt] = useState(false);
     loadData();
   };
 
+  const handleImprevu = async () => {
+    if (!imprevuForm.comment.trim()) return;
+    setSavingImprevu(true);
+    try {
+      await supabase.from('appointment_requests').insert({
+        appointment_id: aptImprevu.id,
+        child_id: childId,
+        requested_by: 'parent',
+        request_type: imprevuForm.type,
+        comment: imprevuForm.comment,
+        status: 'en_attente',
+      });
+      setShowImprevuModal(false);
+      setAptImprevu(null);
+      setImprevuForm({ type: 'report', comment: '' });
+      alert('Votre demande a été envoyée au professionnel.');
+    } catch (error) {
+      console.error('Error sending request:', error);
+    } finally {
+      setSavingImprevu(false);
+    }
+  };
+
   return (
     <div className="pb-6">
       {/* Header */}
@@ -286,6 +313,7 @@ const [savingApt, setSavingApt] = useState(false);
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-slate-400 font-body text-sm mb-4">
           <ArrowLeft size={16} /> Retour
         </button>
+     
 
         {/* Carte pro */}
         <div className="passerelle-card text-center py-6 mb-4"
@@ -383,9 +411,15 @@ const [savingApt, setSavingApt] = useState(false);
       {/* Contenu des tabs */}
       <div className="px-5">
 
-        {/* Planning */}
+       {/* Planning */}
         {activeTab === 'planning' && (
           <div className="space-y-4">
+            <button onClick={() => setShowAddApt(true)}
+              className="w-full h-11 rounded-2xl font-heading font-semibold text-sm flex items-center justify-center gap-2 mb-2"
+              style={{ backgroundColor: '#4A9B8F', color: 'white' }}>
+              <Plus size={16} /> Ajouter un rendez-vous
+            </button>
+
             {/* Prochains RDV */}
             {upcomingApts.length > 0 && (
               <div>
@@ -394,38 +428,45 @@ const [savingApt, setSavingApt] = useState(false);
                   {upcomingApts.map(apt => {
                     const colors = APT_COLORS[apt.appointment_type] || APT_COLORS['autre'];
                     return (
-                     <div key={apt.id} className="rounded-2xl p-4 flex items-start gap-3"
-                      style={{ backgroundColor: colors.bg }}>
-                      <div className="w-3 h-3 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: colors.dot }} />
-                      <div className="flex-1">
-                        <p className="font-heading font-semibold text-sm" style={{ color: colors.text }}>{apt.title}</p>
-                        <div className="flex items-center gap-3 mt-1">
-                          <div className="flex items-center gap-1 text-xs text-slate-500 font-body">
-                            <Calendar size={11} />
-                            {formatDate(apt.start_datetime)}
+                      <div key={apt.id} className="rounded-2xl p-4 flex items-start gap-3"
+                        style={{ backgroundColor: colors.bg }}>
+                        <div className="w-3 h-3 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: colors.dot }} />
+                        <div className="flex-1">
+                          <p className="font-heading font-semibold text-sm" style={{ color: colors.text }}>{apt.title}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <div className="flex items-center gap-1 text-xs text-slate-500 font-body">
+                              <Calendar size={11} />
+                              {formatDate(apt.start_datetime)}
+                            </div>
+                            <div className="flex items-center gap-1 text-xs text-slate-500 font-body">
+                              <Clock size={11} />
+                              {formatTime(apt.start_datetime)} – {formatTime(apt.end_datetime)}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1 text-xs text-slate-500 font-body">
-                            <Clock size={11} />
-                            {formatTime(apt.start_datetime)} – {formatTime(apt.end_datetime)}
-                          </div>
+                          {apt.location && (
+                            <div className="flex items-center gap-1 text-xs text-slate-400 font-body mt-0.5">
+                              <MapPin size={11} />
+                              {apt.location}
+                            </div>
+                          )}
                         </div>
-                        {apt.location && (
-                          <div className="flex items-center gap-1 text-xs text-slate-400 font-body mt-0.5">
-                            <MapPin size={11} />
-                            {apt.location}
-                          </div>
-                        )}
+                        <div className="flex flex-col gap-1 flex-shrink-0">
+                          <button onClick={() => { setAptImprevu(apt); setShowImprevuModal(true); }}
+                            className="text-xs font-heading font-semibold px-2 py-1 rounded-lg bg-orange-50 text-orange-400 border border-orange-100">
+                            Imprevu
+                          </button>
+                          <button onClick={() => { setAptToDelete(apt); setShowDeleteModal(true); }}
+                            className="text-slate-300 hover:text-red-400 text-center">
+                            <X size={14} />
+                          </button>
+                        </div>
                       </div>
-                      <button onClick={() => { setAptToDelete(apt); setShowDeleteModal(true); }}
-                        className="text-slate-300 hover:text-red-400 flex-shrink-0">
-                        <X size={16} />
-                      </button>
-                    </div>
                     );
                   })}
                 </div>
               </div>
             )}
+
 
             {/* RDV passés */}
             {pastApts.length > 0 && (
@@ -458,12 +499,7 @@ const [savingApt, setSavingApt] = useState(false);
               </div>
             )}
 
-            <button
-              onClick={() => setShowAddApt(true)}
-              className="w-full h-11 rounded-2xl font-heading font-semibold text-sm flex items-center justify-center gap-2 mb-4"
-              style={{ backgroundColor: '#4A9B8F', color: 'white' }}>
-              <Plus size={16} /> Ajouter un rendez-vous
-            </button>
+            
 
             {appointments.length === 0 && (
               <div className="text-center py-12">
@@ -562,6 +598,52 @@ const [savingApt, setSavingApt] = useState(false);
           </div>
         )}
       </div>
+
+      {showImprevuModal && aptImprevu && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-[400px] bg-white rounded-3xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-heading font-bold text-lg text-slate-800">Imprevu</h3>
+              <button onClick={() => setShowImprevuModal(false)} className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center">
+                <X size={16} className="text-slate-500" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 font-body mb-4">{aptImprevu.title} — {formatDate(aptImprevu.start_datetime)}</p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-heading font-bold uppercase tracking-widest text-slate-400 mb-2">Type de demande</label>
+                <div className="flex gap-2">
+                  <button onClick={() => setImprevuForm(p => ({...p, type: 'report'}))}
+                    className={`flex-1 h-11 rounded-2xl font-heading font-semibold text-sm border-2 transition-all ${imprevuForm.type === 'report' ? 'border-orange-400 bg-orange-50 text-orange-600' : 'border-stone-200 text-slate-500'}`}>
+                    Report
+                  </button>
+                  <button onClick={() => setImprevuForm(p => ({...p, type: 'annulation'}))}
+                    className={`flex-1 h-11 rounded-2xl font-heading font-semibold text-sm border-2 transition-all ${imprevuForm.type === 'annulation' ? 'border-red-400 bg-red-50 text-red-600' : 'border-stone-200 text-slate-500'}`}>
+                    Annulation
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-heading font-bold uppercase tracking-widest text-slate-400 mb-1">Commentaire *</label>
+                <textarea value={imprevuForm.comment} onChange={e => setImprevuForm(p => ({...p, comment: e.target.value}))}
+                  placeholder="Expliquez la raison de votre demande..."
+                  rows={3} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm font-body resize-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setShowImprevuModal(false)}
+                className="flex-1 h-11 bg-stone-100 text-slate-600 rounded-2xl font-heading font-semibold text-sm">
+                Annuler
+              </button>
+              <button onClick={handleImprevu} disabled={savingImprevu || !imprevuForm.comment.trim()}
+                className="flex-1 h-11 rounded-2xl font-heading font-semibold text-sm disabled:opacity-40"
+                style={{ backgroundColor: '#E8967A', color: 'white' }}>
+                {savingImprevu ? '...' : 'Envoyer la demande'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}    
 
       {showDeleteModal && aptToDelete && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
