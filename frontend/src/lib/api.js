@@ -17,7 +17,7 @@ export const authAPI = {
 export const childrenAPI = {
   list: async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase.from('children').select('*').eq('professional_id', user.id).order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('children').select('*').eq('professional_id', user.id).or('archived.is.null,archived.eq.false').order('created_at', { ascending: false });
     if (error) throw error;
     const dataWithAge = (data || []).map(child => ({
       ...child,
@@ -280,7 +280,8 @@ export const appointmentsAPI = {
     return { data };
   },
   create: async (data) => {
-    const { data: result, error } = await supabase.from('appointments').insert([data]).select().single();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: result, error } = await supabase.from('appointments').insert([{ ...data, professional_id: user.id }]).select().single();
     if (error) throw error;
     return { data: result };
   },

@@ -6,7 +6,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Avatar } from '../components/ui/avatar';
 import { Input } from '../components/ui/input';
-import { Users, Search, Calendar, MessageCircle, FileText, Plus } from 'lucide-react';
+import { Users, Search, Calendar, MessageCircle, FileText, Plus, Archive } from 'lucide-react';
 import { formatDate, formatTime } from '../lib/utils';
 
 const calculateAge = (birthDate) => {
@@ -32,10 +32,13 @@ const Children = () => {
   const [linkSearchResult, setLinkSearchResult] = useState(null);
   const [linkSearching, setLinkSearching] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedChildren, setArchivedChildren] = useState([]);
 
   useEffect(() => {
     loadChildren();
     loadAppointments();
+    loadArchivedChildren();
   }, []);
 
   const loadChildren = async () => {
@@ -99,6 +102,37 @@ const Children = () => {
     } finally {
       setLinking(false);
     }
+  };
+
+
+
+  const unarchiveChild = async (childId, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await supabase.from('children').update({ archived: false, archived_at: null }).eq('id', childId);
+    loadChildren();
+    loadArchivedChildren();
+  };
+
+  const loadArchivedChildren = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data } = await supabase.from('children').select('*')
+        .eq('professional_id', user.id)
+        .eq('archived', true)
+        .order('archived_at', { ascending: false });
+      setArchivedChildren(data || []);
+    } catch (error) {
+      console.error('Error loading archived:', error);
+    }
+  };
+
+  const archiveChild = async (childId, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm('Archiver cet enfant ?')) return;
+    await supabase.from('children').update({ archived: true, archived_at: new Date().toISOString() }).eq('id', childId);
+    loadChildren();
   };
 
   const filteredChildren = children.filter(child =>
@@ -193,6 +227,11 @@ const Children = () => {
                       <FileText className="w-4 h-4 mx-auto mb-1 text-foreground-muted" />
                       <p className="text-xs text-foreground-muted">Documents</p>
                     </div>
+                    <div className="flex-1 p-2 bg-background-subtle rounded-lg text-center cursor-pointer hover:bg-red-50"
+                      onClick={(e) => archiveChild(child.id, e)}>
+                      <Archive className="w-4 h-4 mx-auto mb-1 text-foreground-muted" />
+                      <p className="text-xs text-foreground-muted">Archiver</p>
+                    </div>
                   </div>
                 </Card>
               </Link>
@@ -207,6 +246,36 @@ const Children = () => {
           </p>
         </Card>
       )}
+
+      {/* Section archives */}
+      <div>
+        <button
+          onClick={() => { setShowArchived(!showArchived); if (!showArchived) loadArchivedChildren(); }}
+          className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-600 font-semibold">
+          <span>{showArchived ? '▼' : '▶'}</span> Archives ({archivedChildren.length})
+        </button>
+        {showArchived && archivedChildren.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4 opacity-60">
+            {archivedChildren.map(child => (
+              <div key={child.id} className="p-4 border border-dashed border-slate-200 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Avatar src={child.photo_url} firstName={child.first_name} lastName={child.last_name} size="default" />
+                  <div>
+                    <p className="text-sm font-medium text-slate-600">{child.first_name} {child.last_name}</p>
+                    <p className="text-xs text-slate-400">{calculateAge(child.birth_date)} ans</p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={(e) => unarchiveChild(child.id, e)}>
+                  Restaurer
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        {showArchived && archivedChildren.length === 0 && (
+          <p className="text-sm text-slate-400 mt-3 italic">Aucun enfant archivé</p>
+        )}
+      </div>
 
       {/* Modal lier un enfant */}
       {showLinkModal && (
