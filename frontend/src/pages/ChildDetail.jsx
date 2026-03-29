@@ -11,6 +11,7 @@ import {
   Activity, Target, Sparkles, Phone, Users, Mail, FileText, Edit2, Receipt
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
+import { supabase } from '../lib/supabase';
 
 const ChildDetail = () => {
   const { childId } = useParams();
@@ -24,6 +25,12 @@ const ChildDetail = () => {
   });
   const [invoicePreview, setInvoicePreview] = useState(null);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteSearchResult, setInviteSearchResult] = useState(null);
+  const [inviteSearching, setInviteSearching] = useState(false);
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteCode, setInviteCode] = useState(null);
 
   useEffect(() => {
     loadChildDetail();
@@ -146,6 +153,57 @@ const ChildDetail = () => {
     items: (child.weekly_schedule || []).filter(s => s.day_of_week === day)
   }));
 
+  const searchParentByEmail = async () => {
+    if (!inviteEmail.trim()) return;
+    setInviteSearching(true);
+    setInviteSearchResult(null);
+    try {
+      const { data } = await supabase.from('parents').select('*').eq('email', inviteEmail.trim()).maybeSingle();
+      if (data) {
+        setInviteSearchResult({ found: true, parent: data });
+      } else {
+        setInviteSearchResult({ found: false });
+      }
+    } catch (error) {
+      console.error('Error searching parent:', error);
+    } finally {
+      setInviteSearching(false);
+    }
+  };
+
+  const sendInvitation = async () => {
+    setInviteSending(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (inviteSearchResult?.found) {
+        // Parent existe — créer une notification
+        await supabase.from('notifications').insert({
+          user_id: inviteSearchResult.parent.id,
+          type: 'liaison_demande',
+          title: 'Demande de liaison',
+          message: `Un professionnel souhaite vous lier à l'enfant ${child.child.first_name} ${child.child.last_name}`,
+          data: { child_id: childId, professional_id: user.id },
+        });
+        setInviteSearchResult(prev => ({ ...prev, sent: true }));
+      } else {
+        // Parent n'existe pas — générer un code
+        const code = 'PASS-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+        await supabase.from('parent_invitations').insert({
+          token: code,
+          child_id: childId,
+          professional_id: user.id,
+          parent_email: inviteEmail.trim(),
+          status: 'pending',
+        });
+        setInviteCode(code);
+      }
+    } catch (error) {
+      console.error('Error sending invitation:', error);
+    } finally {
+      setInviteSending(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in" data-testid="child-detail">
       {/* Back Button */}
@@ -206,6 +264,10 @@ const ChildDetail = () => {
                 >
                   <Receipt className="w-4 h-4 mr-2" />
                   Créer une facture
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setShowInviteModal(true)}>
+                  <Users className="w-4 h-4 mr-2" />
+                  Inviter un parent
                 </Button>
                 <Link to={`/children/${childId}/edit`}>
                   <Button variant="ghost" size="sm" data-testid="edit-child-button">
@@ -690,6 +752,82 @@ const ChildDetail = () => {
       </div>
 
       {/* Invoice Creation Modal */}
+
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-md w-full">
+            <CardHeader>
+              <CardTitle>Inviter un parent</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!inviteCode ? (
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={inviteEmail}
+                      onChange={e => setInviteEmail(e.target.value)}
+                      placeholder="Email du parent"
+                      className="flex-1 h-10 px-3 border border-slate-200 rounded-lg text-sm"
+                      onKeyDown={e => e.key === 'Enter' && searchParentByEmail()}
+                    />
+                    <Button onClick={searchParentByEmail} disabled={inviteSearching} size="sm">
+                      {inviteSearching ? '...' : 'Rechercher'}
+                    </Button>
+                  </div>
+
+                  {inviteSearchResult?.found && !inviteSearchResult?.sent && (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-sm text-green-700 font-semibold">
+                        ✓ Compte trouvé : {inviteSearchResult.parent.first_name} {inviteSearchResult.parent.last_name}
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">Une notification sera envoyée dans son application.</p>
+                      <Button className="mt-3 w-full" size="sm" onClick={sendInvitation} disabled={inviteSending}>
+                        {inviteSending ? 'Envoi...' : 'Envoyer la demande de liaison'}
+                      </Button>
+                    </div>
+                  )}
+
+                  {inviteSearchResult?.sent && (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-sm text-green-700 font-semibold">✓ Demande envoyée !</p>
+                      <p className="text-xs text-green-600 mt-1">Le parent recevra une notification dans son application.</p>
+                    </div>
+                  )}
+
+                  {inviteSearchResult?.found === false && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-sm text-amber-700 font-semibold">Aucun compte trouvé</p>
+                      <p className="text-xs text-amber-600 mt-1">Générez un code d'invitation à communiquer au parent.</p>
+                      <Button className="mt-3 w-full" size="sm" onClick={sendInvitation} disabled={inviteSending}>
+                        {inviteSending ? 'Génération...' : 'Générer un code d\'invitation'}
+                      </Button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-sm text-slate-600 mb-3">Code d'invitation généré :</p>
+                  <div className="bg-primary/10 border-2 border-primary/30 rounded-2xl p-6">
+                    <p className="text-3xl font-bold text-primary tracking-widest">{inviteCode}</p>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-3">Communiquez ce code au parent. Il devra le saisir lors de la création de son compte ou dans ses paramètres.</p>
+                </div>
+              )}
+
+              <Button variant="outline" className="w-full" onClick={() => {
+                setShowInviteModal(false);
+                setInviteEmail('');
+                setInviteSearchResult(null);
+                setInviteCode(null);
+              }}>
+                Fermer
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {showInvoiceModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="max-w-lg w-full">

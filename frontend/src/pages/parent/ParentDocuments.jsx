@@ -39,6 +39,7 @@ export default function ParentDocuments() {
   const [linkedPros, setLinkedPros] = useState([]);
   const [selectedPros, setSelectedPros] = useState([]);
   const [savingAccess, setSavingAccess] = useState(false);
+  const [deletingDoc, setDeletingDoc] = useState(null);
   const [docAccess, setDocAccess] = useState({});
   const fileRef = useRef(null);
 
@@ -139,6 +140,19 @@ export default function ParentDocuments() {
     </div>
   );
 
+  const deleteDocument = async (doc) => {
+    if (!window.confirm(`Supprimer "${doc.title}" ?`)) return;
+    setDeletingDoc(doc.id);
+    try {
+      await supabase.from('documents').delete().eq('id', doc.id);
+      loadData();
+    } catch (error) {
+      console.error('Error deleting:', error);
+    } finally {
+      setDeletingDoc(null);
+    }
+  };
+
   return (
     <div className="px-5 pt-5 pb-6">
       <div className="flex items-center justify-between mb-5">
@@ -203,13 +217,14 @@ export default function ParentDocuments() {
                   </div>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
+                  
                   {doc.file_url && (
                     <a href={doc.file_url} target="_blank" rel="noreferrer"
                       className="w-9 h-9 rounded-xl bg-sage-50 flex items-center justify-center text-sage-600">
                       <Download size={16} />
                     </a>
                   )}
-                  <button
+                    <button
                     onClick={() => {
                       setDocForAccess(doc);
                       const existing = docAccess[doc.id] || [];
@@ -219,6 +234,13 @@ export default function ParentDocuments() {
                     className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-500"
                     title="Gérer les accès">
                     <Users size={14} />
+                  </button>
+                  <button
+                    onClick={() => deleteDocument(doc)}
+                    disabled={deletingDoc === doc.id}
+                    className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center text-red-400"
+                    title="Supprimer">
+                    <X size={14} />
                   </button>
                 </div>
               </div>

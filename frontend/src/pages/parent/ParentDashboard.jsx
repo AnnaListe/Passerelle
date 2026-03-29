@@ -65,13 +65,15 @@ export default function ParentDashboard() {
 
         // Mood aujourd'hui
         const today = new Date().toISOString().split('T')[0];
-        const { data: moodData } = await supabase.from('child_moods')
+        const { data: moodDataArr } = await supabase.from('child_moods')
           .select('*')
           .eq('child_id', linkData.child_id)
-          .eq('date', today)
-          .maybeSingle();
-        setTodayMood(moodData);
+          .eq('date', today);
+        const moodMatin = moodDataArr?.find(m => m.mood_type === 'matin') || null;
+        const moodSoir = moodDataArr?.find(m => m.mood_type === 'soir') || null;
+        setTodayMood({ matin: moodMatin, soir: moodSoir });
       }
+
 
       // Conversations récentes
       const { data: convs } = await supabase.from('conversations').select('*, children(first_name, last_name)')
@@ -106,7 +108,8 @@ export default function ParentDashboard() {
   };
 
   const todayFr = format(new Date(), "EEEE d MMMM", { locale: fr });
-  const moodCfg = todayMood ? MOOD_CONFIG[todayMood.mood_level] : null;
+  const moodMatinCfg = todayMood?.matin ? MOOD_CONFIG[todayMood.matin.mood_level] : null;
+  const moodSoirCfg = todayMood?.soir ? MOOD_CONFIG[todayMood.soir.mood_level] : null;
 
   if (loading) return (
     <div className="p-6 space-y-4">
@@ -162,24 +165,40 @@ export default function ParentDashboard() {
           <div
             onClick={() => navigate('/parent/mood')}
             className="passerelle-card cursor-pointer"
-            style={{ backgroundColor: moodCfg ? moodCfg.bg : '#F5F5F4' }}
           >
             <p className="section-label mb-2">Mood du jour</p>
-            {moodCfg ? (
-              <div className="flex flex-col items-center gap-1.5">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: moodCfg.color }}>
-                  <moodCfg.Icon size={26} className="text-white" />
-                </div>
-                <p className="font-heading font-semibold text-sm text-slate-700 text-center leading-tight">{moodCfg.label}</p>
+            <div className="flex gap-2">
+              {/* Matin */}
+              <div className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl" style={{ backgroundColor: moodMatinCfg ? moodMatinCfg.bg : '#F5F5F4' }}>
+                <span className="text-[10px] text-slate-400 font-heading font-semibold">☀️ Matin</span>
+                {moodMatinCfg ? (
+                  <>
+                    <span className="text-2xl">{['😢','😟','😐','🙂','😄'][todayMood.matin.mood_level - 1]}</span>
+                    <span className="text-[10px] font-heading font-semibold text-center leading-tight" style={{ color: moodMatinCfg.color }}>{moodMatinCfg.label}</span>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center gap-1">
+                    <Plus size={16} className="text-slate-300" />
+                    <span className="text-[10px] text-slate-400 font-body text-center">Non renseigné</span>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center">
-                  <Plus size={22} className="text-slate-400" />
-                </div>
-                <p className="text-xs text-slate-500 font-body text-center">Renseigner le mood</p>
+              {/* Soir */}
+              <div className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl" style={{ backgroundColor: moodSoirCfg ? moodSoirCfg.bg : '#F5F5F4' }}>
+                <span className="text-[10px] text-slate-400 font-heading font-semibold">🌙 Soir</span>
+                {moodSoirCfg ? (
+                  <>
+                    <span className="text-2xl">{['😢','😟','😐','🙂','😄'][todayMood.soir.mood_level - 1]}</span>
+                    <span className="text-[10px] font-heading font-semibold text-center leading-tight" style={{ color: moodSoirCfg.color }}>{moodSoirCfg.label}</span>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center gap-1">
+                    <Plus size={16} className="text-slate-300" />
+                    <span className="text-[10px] text-slate-400 font-body text-center">Non renseigné</span>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Prochain RDV */}
