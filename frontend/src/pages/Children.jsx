@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { childrenAPI, appointmentsAPI } from '../lib/api';
+import { supabase } from '../lib/supabase';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Avatar } from '../components/ui/avatar';
@@ -21,10 +22,16 @@ const calculateAge = (birthDate) => {
 };
 
 const Children = () => {
+  const navigate = useNavigate();
   const [children, setChildren] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkEmail, setLinkEmail] = useState('');
+  const [linkSearchResult, setLinkSearchResult] = useState(null);
+  const [linkSearching, setLinkSearching] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   useEffect(() => {
     loadChildren();
@@ -59,6 +66,41 @@ const Children = () => {
     return childAppointments[0];
   };
 
+  const searchParentChildren = async () => {
+    if (!linkEmail.trim()) return;
+    setLinkSearching(true);
+    setLinkSearchResult(null);
+    try {
+      const { data: parent } = await supabase.from('parents').select('*').eq('email', linkEmail.trim()).maybeSingle();
+      if (!parent) { setLinkSearchResult({ found: false }); return; }
+      const { data: links } = await supabase.from('parent_child_links').select('child_id').eq('parent_id', parent.id);
+      if (!links?.length) { setLinkSearchResult({ found: true, parent, children: [] }); return; }
+      const childIds = links.map(l => l.child_id);
+      const { data: childrenData } = await supabase.from('children').select('*').in('id', childIds);
+      setLinkSearchResult({ found: true, parent, children: childrenData || [] });
+    } catch (error) {
+      console.error('Error searching:', error);
+    } finally {
+      setLinkSearching(false);
+    }
+  };
+
+  const linkChild = async (child) => {
+    setLinking(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('children').update({ professional_id: user.id }).eq('id', child.id);
+      setShowLinkModal(false);
+      setLinkEmail('');
+      setLinkSearchResult(null);
+      loadChildren();
+    } catch (error) {
+      console.error('Error linking:', error);
+    } finally {
+      setLinking(false);
+    }
+  };
+
   const filteredChildren = children.filter(child =>
     child.first_name.toLowerCase().includes(search.toLowerCase()) ||
     child.last_name.toLowerCase().includes(search.toLowerCase())
@@ -82,12 +124,18 @@ const Children = () => {
           </h1>
           <p className="text-foreground-muted">Enfants que vous accompagnez</p>
         </div>
-        <Link to="/children/new">
-          <Button data-testid="create-child-button">
-            <Plus className="w-4 h-4 mr-2" />
-            Créer un nouvel enfant
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowLinkModal(true)}>
+            <Users className="w-4 h-4 mr-2" />
+            Lier un enfant existant
           </Button>
-        </Link>
+          <Link to="/children/new">
+            <Button data-testid="create-child-button">
+              <Plus className="w-4 h-4 mr-2" />
+              Créer un nouvel enfant
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Search */}
@@ -110,29 +158,17 @@ const Children = () => {
             const nextApt = getNextAppointment(child.id);
             const age = calculateAge(child.birth_date);
             return (
-              <Link
-                key={child.id}
-                to={`/children/${child.id}`}
-                data-testid={`child-card-${child.id}`}
-              >
+              <Link key={child.id} to={`/children/${child.id}`} data-testid={`child-card-${child.id}`}>
                 <Card interactive className="h-full">
                   <div className="flex items-start gap-4 mb-4">
-                    <Avatar
-                      src={child.photo_url}
-                      firstName={child.first_name}
-                      lastName={child.last_name}
-                      size="xl"
-                    />
+                    <Avatar src={child.photo_url} firstName={child.first_name} lastName={child.last_name} size="xl" />
                     <div className="flex-1 min-w-0">
                       <h3 className="text-lg font-semibold text-slate-700 mb-1">
                         {child.first_name} {child.last_name}
                       </h3>
-                      <p className="text-sm text-foreground-muted">
-                        {age !== null ? `${age} ans` : ''}
-                      </p>
+                      <p className="text-sm text-foreground-muted">{age !== null ? `${age} ans` : ''}</p>
                     </div>
                   </div>
-
                   {nextApt ? (
                     <div className="p-3 bg-primary-light rounded-lg mb-4">
                       <div className="flex items-center gap-2 text-sm text-primary font-medium mb-1">
@@ -145,12 +181,9 @@ const Children = () => {
                     </div>
                   ) : (
                     <div className="p-3 bg-background-subtle rounded-lg mb-4">
-                      <p className="text-sm text-foreground-muted text-center italic">
-                        Aucun RDV de prévu
-                      </p>
+                      <p className="text-sm text-foreground-muted text-center italic">Aucun RDV de prévu</p>
                     </div>
                   )}
-
                   <div className="flex gap-2">
                     <div className="flex-1 p-2 bg-background-subtle rounded-lg text-center">
                       <MessageCircle className="w-4 h-4 mx-auto mb-1 text-foreground-muted" />
@@ -173,6 +206,66 @@ const Children = () => {
             {search ? 'Aucun enfant trouvé' : 'Aucun enfant'}
           </p>
         </Card>
+      )}
+
+      {/* Modal lier un enfant */}
+      {showLinkModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-md w-full">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-slate-800 font-outfit mb-4">Lier un enfant existant</h3>
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <input type="email" value={linkEmail} onChange={e => setLinkEmail(e.target.value)}
+                    placeholder="Email du parent"
+                    className="flex-1 h-10 px-3 border border-slate-200 rounded-lg text-sm"
+                    onKeyDown={e => e.key === 'Enter' && searchParentChildren()} />
+                  <Button onClick={searchParentChildren} disabled={linkSearching} size="sm">
+                    {linkSearching ? '...' : 'Rechercher'}
+                  </Button>
+                </div>
+
+                {linkSearchResult?.found === false && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm text-amber-700">Aucun compte parent trouvé avec cet email.</p>
+                  </div>
+                )}
+
+                {linkSearchResult?.found && linkSearchResult.children.length === 0 && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-700">Compte trouvé : {linkSearchResult.parent.first_name} {linkSearchResult.parent.last_name}</p>
+                    <p className="text-xs text-blue-600 mt-1">Ce parent n'a pas encore d'enfant enregistré.</p>
+                  </div>
+                )}
+
+                {linkSearchResult?.found && linkSearchResult.children.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-slate-700">Enfants trouvés :</p>
+                    {linkSearchResult.children.map(child => (
+                      <div key={child.id} className="flex items-center justify-between p-3 bg-background-subtle rounded-lg">
+                        <div>
+                          <p className="text-sm font-medium text-slate-700">{child.first_name} {child.last_name}</p>
+                          <p className="text-xs text-foreground-muted">{calculateAge(child.birth_date)} ans</p>
+                        </div>
+                        <Button size="sm" onClick={() => linkChild(child)} disabled={linking}>
+                          {linking ? '...' : 'Lier'}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <Button variant="outline" className="w-full" onClick={() => {
+                  setShowLinkModal(false);
+                  setLinkEmail('');
+                  setLinkSearchResult(null);
+                }}>
+                  Fermer
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );
