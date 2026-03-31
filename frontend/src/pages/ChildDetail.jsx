@@ -68,39 +68,51 @@ const ChildDetail = () => {
 
   const loadInvoicePreview = async () => {
     if (!invoiceData.period_start || !invoiceData.period_end) return;
-    
     try {
-      // Get contract
       const contractsRes = await contractsAPI.list({ child_id: childId });
       const activeContract = contractsRes.data?.find(c => c.active);
-      
       if (!activeContract) {
         setInvoicePreview({ error: 'Aucun contrat actif trouvé' });
         return;
       }
 
-      // Get appointments in period
       const appointmentsRes = await appointmentsAPI.listByChild(childId, {
         start_date: new Date(invoiceData.period_start).toISOString(),
         end_date: new Date(invoiceData.period_end + 'T23:59:59').toISOString()
       }).catch(() => ({ data: [] }));
 
       const appointments = appointmentsRes.data || [];
-      const sessionCount = appointments.filter(a => a.appointment_type === 'seance').length;
+      const seances = appointments.filter(a => a.appointment_type === 'seance');
 
       let totalAmount = 0;
-      if (activeContract.billing_mode === 'par_seance' && activeContract.session_price) {
-        totalAmount = activeContract.session_price * sessionCount;
-      } else if (activeContract.billing_mode === 'tarif_horaire' && activeContract.hourly_rate && activeContract.session_duration_minutes) {
-        const hours = activeContract.session_duration_minutes / 60;
-        totalAmount = activeContract.hourly_rate * hours * sessionCount;
+      let overrunTotal = 0;
+
+      if (activeContract.billing_mode === 'par_seance') {
+        totalAmount = seances.reduce((sum, apt) => {
+          const overrun = apt.overrun_amount || 0;
+          overrunTotal += overrun;
+          return sum + activeContract.session_price + overrun;
+        }, 0);
+      } else {
+        totalAmount = seances.reduce((sum, apt) => {
+          const start = new Date(apt.start_datetime);
+          const end = new Date(apt.end_datetime);
+          const realMinutes = (end - start) / 60000;
+          const roundedMinutes = Math.round(realMinutes / 15) * 15;
+          const sessionAmount = Math.round(activeContract.hourly_rate * (roundedMinutes / 60) * 100) / 100;
+          const overrun = apt.overrun_amount || 0;
+          overrunTotal += overrun;
+          return sum + sessionAmount + overrun;
+        }, 0);
       }
 
       setInvoicePreview({
         contract: activeContract,
         appointments,
-        sessionCount,
-        totalAmount,
+        seances,
+        sessionCount: seances.length,
+        totalAmount: Math.round(totalAmount * 100) / 100,
+        overrunTotal: Math.round(overrunTotal * 100) / 100,
       });
     } catch (err) {
       console.error('Error loading preview:', err);
@@ -895,6 +907,43 @@ const ChildDetail = () => {
                       <div className="flex justify-between">
                         <span className="text-foreground-muted">Séances sur la période:</span>
                         <span className="font-medium">{invoicePreview.sessionCount}</span>
+                      </div>
+
+                      {/* Détail des séances */}
+                      <div className="mt-3 space-y-2">
+                        {invoicePreview.seances.map((apt, i) => {
+                          const start = new Date(apt.start_datetime);
+                          const end = new Date(apt.end_datetime);
+                          const realMinutes = Math.round((end - start) / 60000 / 15) * 15;
+                          const aptDate = start.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+                          let sessionAmount = 0;
+                          if (invoicePreview.contract.billing_mode === 'par_seance') {
+                            sessionAmount = invoicePreview.contract.session_price;
+                          } else {
+                            sessionAmount = Math.round(invoicePreview.contract.hourly_rate * (realMinutes / 60) * 100) / 100;
+                          }
+                          return (
+                            <div key={apt.id}>
+                              <div className="flex justify-between text-xs p-2 bg-white rounded-lg border border-slate-100">
+                                <span className="text-slate-600">
+                                  {aptDate} — {apt.title}
+                                  {invoicePreview.contract.billing_mode === 'tarif_horaire' && (
+                                    <span className="text-slate-400 ml-1">({realMinutes} min)</span>
+                                  )}
+                                </span>
+                                <span className="font-medium text-slate-700">{sessionAmount.toFixed(2)}€</span>
+                              </div>
+                              {apt.overrun_amount && (
+                                <div className="flex justify-between text-xs p-2 bg-amber-50 rounded-lg border border-amber-100 mt-1">
+                                  <span className="text-amber-600">
+                                    ⏱ Dépassement {apt.overrun_minutes ? `(${apt.overrun_minutes} min)` : ''}
+                                  </span>
+                                  <span className="font-medium text-amber-700">{apt.overrun_amount.toFixed(2)}€</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                       <div className="pt-3 border-t border-slate-200">
                         <div className="flex justify-between text-lg">

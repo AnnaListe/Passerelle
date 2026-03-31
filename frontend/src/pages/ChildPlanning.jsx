@@ -8,7 +8,7 @@ import { Input, Label } from '../components/ui/input';
 import { Avatar } from '../components/ui/avatar';
 import { 
   ChevronLeft, ChevronRight, Calendar, Plus, Edit2, Trash2, 
-  ArrowLeft, Settings, X, Check, Sun
+  ArrowLeft, Settings, X, Check, Sun, Clock
 } from 'lucide-react';
 import { formatTime, formatDate } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -69,6 +69,12 @@ const ChildPlanning = () => {
   const [editingAppointment, setEditingAppointment] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurringModal, setShowRecurringModal] = useState(false);
+  const [showOverrunModal, setShowOverrunModal] = useState(false);
+  const [overrunAppointment, setOverrunAppointment] = useState(null);
+  const [overrunForm, setOverrunForm] = useState({
+    minutes: '',
+    amount: '',
+  });
   const [recurringForm, setRecurringForm] = useState({
   title: '',
   appointment_type: 'seance',
@@ -160,6 +166,45 @@ const ChildPlanning = () => {
       const aptDate = new Date(apt.start_datetime).toISOString().split('T')[0];
       return aptDate === dateStr;
     }).sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime));
+  };
+
+  const handleOpenOverrun = (apt, e) => {
+    e.stopPropagation();
+    setOverrunAppointment(apt);
+    setOverrunForm({
+      minutes: apt.overrun_minutes || '',
+      amount: apt.overrun_amount || '',
+    });
+    setShowOverrunModal(true);
+  };
+
+  const handleSaveOverrun = async () => {
+    try {
+      await supabase
+        .from('appointments')
+        .update({
+          overrun_minutes: overrunForm.minutes ? parseInt(overrunForm.minutes) : null,
+          overrun_amount: overrunForm.amount ? parseFloat(overrunForm.amount) : null,
+        })
+        .eq('id', overrunAppointment.id);
+      await loadData();
+      setShowOverrunModal(false);
+    } catch (error) {
+      console.error('Erreur sauvegarde dépassement:', error);
+    }
+  };
+
+  const handleDeleteRecurring = async (recurringId) => {
+    try {
+      await supabase
+        .from('appointments')
+        .delete()
+        .eq('recurring_id', recurringId);
+      await loadData();
+      setShowModal(false);
+    } catch (error) {
+      console.error('Erreur suppression récurrent:', error);
+    }
   };
 
   const handleOpenModal = (date, appointment = null) => {
@@ -462,8 +507,16 @@ const ChildPlanning = () => {
                       {apt.location && (
                         <div className="truncate opacity-80 text-[10px]">{apt.location}</div>
                       )}
-                    </div>
-                  ))}
+                      {apt.appointment_type === 'seance' && (
+                        <button
+                          onClick={(e) => handleOpenOverrun(apt, e)}
+                          className="mt-1 text-[10px] bg-white/20 hover:bg-white/40 rounded px-1 py-0.5 w-full text-left"
+                        >
+                          {apt.overrun_minutes ? `⏱ +${apt.overrun_minutes}min` : '+ Dépassement'}
+                        </button>
+                      )}
+                                          </div>
+                                        ))}
 
                   {/* Bouton ajouter */}
                   <button
@@ -628,6 +681,65 @@ const ChildPlanning = () => {
           </Card>
         </div>
       )}
+
+      {/* Modal Dépassement */}
+      {showOverrunModal && overrunAppointment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-sm w-full">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-500" />
+                Dépassement de séance
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-foreground-muted">
+                {overrunAppointment.title} — {formatDate(overrunAppointment.start_datetime)}
+              </p>
+              <div>
+                <Label htmlFor="overrun-minutes">Durée du dépassement (minutes)</Label>
+                <Input
+                  id="overrun-minutes"
+                  type="number"
+                  min="1"
+                  value={overrunForm.minutes}
+                  onChange={(e) => setOverrunForm({...overrunForm, minutes: e.target.value})}
+                  placeholder="Ex: 15"
+                />
+              </div>
+              <div>
+                <Label htmlFor="overrun-amount">Montant à facturer (€)</Label>
+                <Input
+                  id="overrun-amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={overrunForm.amount}
+                  onChange={(e) => setOverrunForm({...overrunForm, amount: e.target.value})}
+                  placeholder="Ex: 12.50"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowOverrunModal(false)}
+                >
+                  Annuler
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleSaveOverrun}
+                >
+                  <Check className="w-4 h-4 mr-2" />
+                  Enregistrer
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Modal RDV récurrent */}
       {showRecurringModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

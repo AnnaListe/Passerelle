@@ -223,9 +223,16 @@ export const invoicesAPI = {
     return { data };
   },
   detail: async (invoiceId) => {
-    const { data, error } = await supabase.from('invoices').select('*').eq('id', invoiceId).single();
+    const { data, error } = await supabase.from('invoices').select('*, invoice_lines(*)').eq('id', invoiceId).single();
     if (error) throw error;
     return { data };
+  },
+  delete: async (invoiceId) => {
+    const { error } = await supabase.from('invoices').delete().eq('id', invoiceId);
+    if (error) throw error;
+    // Supprimer aussi les lignes associées
+    await supabase.from('invoice_lines').delete().eq('invoice_id', invoiceId);
+    return { data: null };
   },
   updateStatus: async (invoiceId, data) => {
     const { data: result, error } = await supabase.from('invoices').update(data).eq('id', invoiceId).select().single();
@@ -235,15 +242,34 @@ export const invoicesAPI = {
   createFromContract: async (data) => {
     const { data: { user } } = await supabase.auth.getUser();
     const contract = (await supabase.from('contracts').select('*').eq('child_id', data.child_id).eq('active', true).single()).data;
-    const appointments = (await supabase.from('appointments').select('*').eq('child_id', data.child_id).gte('start_datetime', data.period_start).lte('start_datetime', data.period_end)).data || [];
-    const sessionCount = appointments.filter(a => a.appointment_type === 'seance').length;
+    const appointments = (await supabase.from('appointments').select('*').eq('child_id', data.child_id).gte('start_datetime', data.period_start).lte('start_datetime', data.period_end + 'T23:59:59')).data || [];
+    const seances = appointments.filter(a => a.appointment_type === 'seance');
+
     let total = 0;
+
     if (contract.billing_mode === 'par_seance') {
-      total = Math.round(contract.session_price * sessionCount * 100) / 100;
+      // Prix fixe par séance + dépassements
+      total = seances.reduce((sum, apt) => {
+        const sessionTotal = contract.session_price;
+        const overrun = apt.overrun_amount || 0;
+        return sum + sessionTotal + overrun;
+      }, 0);
     } else {
-      const hours = contract.session_duration_minutes / 60;
-      total = Math.round(contract.hourly_rate * hours * sessionCount * 100) / 100;
+      // Tarif horaire : calcul sur durée réelle arrondie au quart d'heure
+      total = seances.reduce((sum, apt) => {
+        const start = new Date(apt.start_datetime);
+        const end = new Date(apt.end_datetime);
+        const realMinutes = (end - start) / 60000;
+        // Arrondi au quart d'heure le plus proche
+        const roundedMinutes = Math.round(realMinutes / 15) * 15;
+        const sessionAmount = Math.round(contract.hourly_rate * (roundedMinutes / 60) * 100) / 100;
+        const overrun = apt.overrun_amount || 0;
+        return sum + sessionAmount + overrun;
+      }, 0);
     }
+
+    total = Math.round(total * 100) / 100;
+
     const invoiceNumber = 'FAC-' + Date.now();
     const { data: result, error } = await supabase.from('invoices').insert([{
       child_id: data.child_id,
@@ -255,8 +281,73 @@ export const invoicesAPI = {
       status: 'brouillon',
     }]).select().single();
     if (error) throw error;
+
+    // Créer les lignes de facture
+    const lines = [];
+    if (contract.billing_mode === 'par_seance') {
+      seances.forEach(apt => {
+        const aptDate = new Date(apt.start_datetime).toISOString().split('T')[0];
+        lines.push({
+          invoice_id: result.id,
+          appointment_id: apt.id,
+          description: apt.title,
+          date: aptDate,
+          unit_price: contract.session_price,
+          amount: contract.session_price,
+          is_overrun: false,
+        });
+        if (apt.overrun_amount) {
+          lines.push({
+            invoice_id: result.id,
+            appointment_id: apt.id,
+            description: `Dépassement — ${apt.title}`,
+            date: aptDate,
+            duration_minutes: apt.overrun_minutes || null,
+            unit_price: apt.overrun_amount,
+            amount: apt.overrun_amount,
+            is_overrun: true,
+          });
+        }
+      });
+    } else {
+      seances.forEach(apt => {
+        const start = new Date(apt.start_datetime);
+        const end = new Date(apt.end_datetime);
+        const realMinutes = (end - start) / 60000;
+        const roundedMinutes = Math.round(realMinutes / 15) * 15;
+        const sessionAmount = Math.round(contract.hourly_rate * (roundedMinutes / 60) * 100) / 100;
+        const aptDate = start.toISOString().split('T')[0];
+        lines.push({
+          invoice_id: result.id,
+          appointment_id: apt.id,
+          description: apt.title,
+          date: aptDate,
+          duration_minutes: roundedMinutes,
+          unit_price: contract.hourly_rate,
+          amount: sessionAmount,
+          is_overrun: false,
+        });
+        if (apt.overrun_amount) {
+          lines.push({
+            invoice_id: result.id,
+            appointment_id: apt.id,
+            description: `Dépassement — ${apt.title}`,
+            date: aptDate,
+            duration_minutes: apt.overrun_minutes || null,
+            unit_price: apt.overrun_amount,
+            amount: apt.overrun_amount,
+            is_overrun: true,
+          });
+        }
+      });
+    }
+
+    if (lines.length > 0) {
+      await supabase.from('invoice_lines').insert(lines);
+    }
+
     return { data: result };
-  },
+    },
 };
 
 // APPOINTMENTS

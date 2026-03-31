@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { invoicesAPI } from '../lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input, Label } from '../components/ui/input';
-import { ArrowLeft, Receipt, Calendar, Euro, Check, AlertCircle, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Receipt, Calendar, Euro, Check, AlertCircle, ExternalLink, Trash2, Edit2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatDate } from '../lib/utils';
 
 const InvoiceDetail = () => {
   const { invoiceId } = useParams();
+  const navigate = useNavigate();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -18,6 +19,8 @@ const InvoiceDetail = () => {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Virement');
   const [paymentType, setPaymentType] = useState('full');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editData, setEditData] = useState({ notes: '', period_start: '', period_end: '' });
   const [abbyLoading, setAbbyLoading] = useState(false);
   const [abbyError, setAbbyError] = useState('');
   const [abbySuccess, setAbbySuccess] = useState('');
@@ -30,7 +33,7 @@ const InvoiceDetail = () => {
     try {
       const response = await invoicesAPI.detail(invoiceId);
       setInvoice(response.data);
-      setPaymentAmount(response.data.amount_remaining.toString());
+      setPaymentAmount((response.data.amount_remaining ?? response.data.amount_total ?? 0).toString());
     } catch (error) {
       console.error('Error loading invoice:', error);
     } finally {
@@ -54,6 +57,92 @@ const InvoiceDetail = () => {
       console.error('Error updating invoice:', error);
     } finally {
       setUpdating(false);
+    }
+  };
+  
+  const handleEditInvoice = async () => {
+    try {
+      const appointments = (await supabase
+        .from('appointments')
+        .select('*')
+        .eq('child_id', invoice.child_id)
+        .gte('start_datetime', editData.period_start)
+        .lte('start_datetime', editData.period_end + 'T23:59:59')
+      ).data || [];
+
+      const seances = appointments.filter(a => a.appointment_type === 'seance');
+      const contract = (await supabase
+        .from('contracts')
+        .select('*')
+        .eq('child_id', invoice.child_id)
+        .eq('active', true)
+        .single()
+      ).data;
+
+      let total = 0;
+      if (contract.billing_mode === 'par_seance') {
+        total = seances.reduce((sum, apt) => sum + contract.session_price + (apt.overrun_amount || 0), 0);
+      } else {
+        total = seances.reduce((sum, apt) => {
+          const start = new Date(apt.start_datetime);
+          const end = new Date(apt.end_datetime);
+          const roundedMinutes = Math.round((end - start) / 60000 / 15) * 15;
+          return sum + Math.round(contract.hourly_rate * (roundedMinutes / 60) * 100) / 100 + (apt.overrun_amount || 0);
+        }, 0);
+      }
+      total = Math.round(total * 100) / 100;
+
+      await supabase.from('invoices').update({
+        notes: editData.notes || null,
+        amount_total: total,
+        amount_paid: 0,
+      }).eq('id', invoice.id);
+
+      await supabase.from('invoice_lines').delete().eq('invoice_id', invoice.id);
+
+      const lines = [];
+      seances.forEach(apt => {
+        const start = new Date(apt.start_datetime);
+        const end = new Date(apt.end_datetime);
+        const roundedMinutes = Math.round((end - start) / 60000 / 15) * 15;
+        const aptDate = start.toISOString().split('T')[0];
+        const sessionAmount = contract.billing_mode === 'par_seance'
+          ? contract.session_price
+          : Math.round(contract.hourly_rate * (roundedMinutes / 60) * 100) / 100;
+
+        lines.push({
+          invoice_id: invoice.id,
+          appointment_id: apt.id,
+          description: apt.title,
+          date: aptDate,
+          duration_minutes: contract.billing_mode === 'tarif_horaire' ? roundedMinutes : null,
+          unit_price: contract.billing_mode === 'par_seance' ? contract.session_price : contract.hourly_rate,
+          amount: sessionAmount,
+          is_overrun: false,
+        });
+
+        if (apt.overrun_amount) {
+          lines.push({
+            invoice_id: invoice.id,
+            appointment_id: apt.id,
+            description: `Dépassement — ${apt.title}`,
+            date: aptDate,
+            duration_minutes: apt.overrun_minutes || null,
+            unit_price: apt.overrun_amount,
+            amount: apt.overrun_amount,
+            is_overrun: true,
+          });
+        }
+      });
+
+      if (lines.length > 0) {
+        await supabase.from('invoice_lines').insert(lines);
+      }
+
+      await loadInvoice();
+      setShowEditModal(false);
+    } catch (error) {
+      console.error('Erreur modification facture:', error);
     }
   };
 
@@ -290,7 +379,7 @@ const InvoiceDetail = () => {
               <div>
                 <p className="text-sm font-medium text-slate-600 mb-1">Montant restant</p>
                 <p className={`text-sm font-semibold ${invoice.amount_remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {invoice.amount_remaining.toFixed(2)}€
+                  {(invoice.amount_remaining ?? 0).toFixed(2)}€
                 </p>
               </div>
               {invoice.payment_date && (
@@ -313,7 +402,46 @@ const InvoiceDetail = () => {
               )}
             </CardContent>
           </Card>
-
+          {invoice.invoice_lines && invoice.invoice_lines.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Détail des prestations</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {invoice.invoice_lines
+                  .sort((a, b) => new Date(a.date) - new Date(b.date))
+                  .map((line, i) => (
+                    <div
+                      key={i}
+                      className={`flex justify-between items-center p-3 rounded-lg border text-sm ${
+                        line.is_overrun
+                          ? 'bg-amber-50 border-amber-100'
+                          : 'bg-white border-slate-100'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium text-slate-700">
+                          {line.is_overrun ? '⏱ ' : ''}{line.description}
+                        </p>
+                        <p className="text-xs text-foreground-muted mt-0.5">
+                          {line.date && new Date(line.date).toLocaleDateString('fr-FR')}
+                          {line.duration_minutes && ` — ${line.duration_minutes} min`}
+                        </p>
+                      </div>
+                      <p className="font-semibold text-slate-800">
+                        {(line.amount ?? 0).toFixed(2)}€
+                      </p>
+                    </div>
+                  ))}
+                <div className="flex justify-between items-center pt-3 border-t border-slate-200">
+                  <p className="font-semibold text-slate-700">Total</p>
+                  <p className="font-bold text-primary text-lg">
+                    {(invoice.amount_total ?? 0).toFixed(2)}€
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}    
           {(invoice.payment_date || invoice.last_partial_payment_date) && (
             <Card>
               <CardHeader>
@@ -357,6 +485,36 @@ const InvoiceDetail = () => {
               <CardTitle className="text-lg">Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {invoice.status === 'brouillon' && (
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => setEditData({
+                    notes: invoice.notes || '',
+                    period_start: '',
+                    period_end: '',
+                  }) || setShowEditModal(true)}
+                >
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  Modifier la facture
+                </Button>
+              )}
+             
+              {invoice.status === 'brouillon' && (
+                <Button
+                  variant="danger"
+                  className="w-full"
+                  onClick={async () => {
+                    if (window.confirm('Supprimer cette facture brouillon ?')) {
+                      await invoicesAPI.delete(invoice.id);
+                      navigate('/invoices');
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Supprimer la facture
+                </Button>
+              )}
               {invoice.status === 'brouillon' && (
                 <Button
                   className="w-full"
@@ -444,7 +602,7 @@ const InvoiceDetail = () => {
                 </div>
                 {invoice.amount_remaining > 0 && (
                   <p className="text-foreground-muted">
-                    Il reste {invoice.amount_remaining.toFixed(2)}€ à recevoir
+                    Il reste {(invoice.amount_remaining ?? 0).toFixed(2)}€ à recevoir
                   </p>
                 )}
                 {invoice.status === 'payee' && (
@@ -461,7 +619,57 @@ const InvoiceDetail = () => {
           </Card>
         </div>
       </div>
-
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-md w-full">
+            <CardHeader>
+              <CardTitle>Modifier la facture</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Début de période</Label>
+                  <Input
+                    type="date"
+                    value={editData.period_start}
+                    onChange={(e) => setEditData({...editData, period_start: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Fin de période</Label>
+                  <Input
+                    type="date"
+                    value={editData.period_end}
+                    onChange={(e) => setEditData({...editData, period_end: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Notes</Label>
+                <textarea
+                  value={editData.notes}
+                  onChange={(e) => setEditData({...editData, notes: e.target.value})}
+                  className="w-full bg-input border-transparent focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-xl px-4 py-3 text-slate-700 outline-none min-h-[80px]"
+                  placeholder="Notes sur la facture..."
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setShowEditModal(false)}>
+                  Annuler
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleEditInvoice}
+                  disabled={!editData.period_start || !editData.period_end}
+                >
+                  <Check className="w-4 h-4 mr-2" />
+                  Recalculer et sauvegarder
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="max-w-md w-full">
@@ -484,7 +692,7 @@ const InvoiceDetail = () => {
                     data-testid="payment-amount-input"
                   />
                   <p className="text-xs text-foreground-muted mt-1">
-                    Montant restant dû: {invoice.amount_remaining.toFixed(2)}€
+                    Montant restant dû: {(invoice.amount_remaining ?? 0).toFixed(2)}€
                   </p>
                 </div>
               )}
@@ -492,7 +700,7 @@ const InvoiceDetail = () => {
                 <div className="p-3 bg-green-50 rounded-lg border border-green-200">
                   <p className="text-sm font-medium text-slate-700 mb-1">Montant à payer</p>
                   <p className="text-2xl font-bold text-slate-800">
-                    {invoice.amount_remaining.toFixed(2)}€
+                    {(invoice.amount_remaining ?? 0).toFixed(2)}€
                   </p>
                 </div>
               )}
