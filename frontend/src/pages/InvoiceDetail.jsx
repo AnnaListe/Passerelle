@@ -5,7 +5,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input, Label } from '../components/ui/input';
-import { ArrowLeft, Receipt, Calendar, Euro, Check, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Receipt, Calendar, Euro, Check, AlertCircle, ExternalLink } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { formatDate } from '../lib/utils';
 
 const InvoiceDetail = () => {
@@ -16,7 +17,10 @@ const InvoiceDetail = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Virement');
-  const [paymentType, setPaymentType] = useState('full'); // 'full' or 'partial'
+  const [paymentType, setPaymentType] = useState('full');
+  const [abbyLoading, setAbbyLoading] = useState(false);
+  const [abbyError, setAbbyError] = useState('');
+  const [abbySuccess, setAbbySuccess] = useState('');
 
   useEffect(() => {
     loadInvoice();
@@ -39,19 +43,119 @@ const InvoiceDetail = () => {
     try {
       const amount = paymentType === 'full' ? invoice.amount_total : parseFloat(paymentAmount);
       const status = paymentType === 'full' ? 'payee' : 'partiellement_payee';
-      
       await invoicesAPI.updateStatus(invoiceId, {
         status,
         amount_paid: amount,
         payment_method: paymentMethod
       });
-      
       await loadInvoice();
       setShowPaymentModal(false);
     } catch (error) {
       console.error('Error updating invoice:', error);
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleSendToAbby = async () => {
+    setAbbyLoading(true);
+    setAbbyError('');
+    setAbbySuccess('');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase
+        .from('professional_profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.abby_api_key) {
+        setAbbyError('Clé API Abby manquante. Ajoutez-la dans votre profil → Intégrations.');
+        setAbbyLoading(false);
+        return;
+      }
+
+      const { data: child } = await supabase
+        .from('children')
+        .select('*')
+        .eq('id', invoice.child_id)
+        .single();
+
+      const { data: parentLink } = await supabase
+        .from('parent_child_links')
+        .select('*, parents(*)')
+        .eq('child_id', invoice.child_id)
+        .maybeSingle();
+
+      const parent = parentLink?.parents;
+
+      const { data: contract } = await supabase
+        .from('contracts')
+        .select('*')
+        .eq('child_id', invoice.child_id)
+        .eq('active', true)
+        .maybeSingle();
+
+      const headers = {
+        'Authorization': `Bearer ${profile.abby_api_key}`,
+        'Content-Type': 'application/json',
+      };
+
+      const customerRes = await fetch('https://api.app-abby.com/v2/contacts', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          firstname: parent?.first_name || child.first_name,
+          lastname: parent?.last_name || child.last_name,
+          emails: parent?.email ? [parent.email] : [],
+        }),
+      });
+      const customer = await customerRes.json();
+
+      if (!customer?.id) {
+        setAbbyError('Impossible de créer le client dans Abby.');
+        return;
+      }
+
+      const invoiceRes = await fetch(`https://api.app-abby.com/v2/billing/invoice/${customer.id}`, {
+        method: 'POST',
+        headers,
+      });
+      const abbyInvoice = await invoiceRes.json();
+
+      if (!abbyInvoice?.id) {
+        setAbbyError('Impossible de créer la facture dans Abby.');
+        return;
+      }
+
+      const designation = contract?.billing_mode === 'par_seance'
+        ? `Séances - ${child.first_name} ${child.last_name}`
+        : `Accompagnement - ${child.first_name} ${child.last_name}`;
+
+      const unitPrice = contract?.billing_mode === 'par_seance'
+        ? contract.session_price
+        : (contract?.hourly_rate * contract?.session_duration_minutes / 60);
+
+      await fetch(`https://api.app-abby.com/v2/billing/${abbyInvoice.id}/lines`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          lines: [{
+            designation,
+            unitPrice: unitPrice || invoice.amount_total,
+            quantity: contract?.billing_mode === 'par_seance' ? contract.sessions_per_month : 1,
+            vatCode: 'FR_0',
+          }]
+        }),
+      });
+
+      setAbbySuccess('Facture créée dans Abby ! Ouvrez Abby pour la finaliser.');
+
+    } catch (error) {
+      console.error('Erreur Abby:', error);
+      setAbbyError("Erreur lors de l'envoi vers Abby. Vérifiez votre clé API.");
+    } finally {
+      setAbbyLoading(false);
     }
   };
 
@@ -93,7 +197,7 @@ const InvoiceDetail = () => {
 
   const getStatusDescription = (status) => {
     const descriptions = {
-      'brouillon': 'La facture est en brouillon et n\'a pas encore été envoyée',
+      'brouillon': "La facture est en brouillon et n'a pas encore été envoyée",
       'en_attente_paiement': 'La facture a été envoyée et est en attente de paiement',
       'partiellement_payee': 'Un paiement partiel a été reçu',
       'payee': 'La facture a été entièrement payée',
@@ -122,7 +226,6 @@ const InvoiceDetail = () => {
 
   return (
     <div className="space-y-6 animate-in" data-testid="invoice-detail">
-      {/* Back Button */}
       <Link to="/invoices">
         <Button variant="ghost" data-testid="back-button">
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -130,7 +233,6 @@ const InvoiceDetail = () => {
         </Button>
       </Link>
 
-      {/* Header Card */}
       <Card className="bg-gradient-to-br from-amber-50 to-white border-amber-200">
         <CardContent className="pt-6">
           <div className="flex items-start justify-between gap-4">
@@ -161,9 +263,7 @@ const InvoiceDetail = () => {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Info */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Invoice Details */}
           <Card>
             <CardHeader>
               <CardTitle>Détails de la facture</CardTitle>
@@ -189,9 +289,7 @@ const InvoiceDetail = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-slate-600 mb-1">Montant restant</p>
-                <p className={`text-sm font-semibold ${
-                  invoice.amount_remaining > 0 ? 'text-red-600' : 'text-green-600'
-                }`}>
+                <p className={`text-sm font-semibold ${invoice.amount_remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
                   {invoice.amount_remaining.toFixed(2)}€
                 </p>
               </div>
@@ -216,7 +314,6 @@ const InvoiceDetail = () => {
             </CardContent>
           </Card>
 
-          {/* Payment History */}
           {(invoice.payment_date || invoice.last_partial_payment_date) && (
             <Card>
               <CardHeader>
@@ -228,36 +325,24 @@ const InvoiceDetail = () => {
                     <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200">
                       <div>
                         <p className="text-sm font-medium text-slate-700">Paiement partiel</p>
-                        <p className="text-xs text-foreground-muted">
-                          {formatDate(invoice.last_partial_payment_date)}
-                        </p>
+                        <p className="text-xs text-foreground-muted">{formatDate(invoice.last_partial_payment_date)}</p>
                         {invoice.payment_method && (
-                          <p className="text-xs text-foreground-muted">
-                            Moyen: {invoice.payment_method}
-                          </p>
+                          <p className="text-xs text-foreground-muted">Moyen: {invoice.payment_method}</p>
                         )}
                       </div>
-                      <p className="text-sm font-semibold text-slate-700">
-                        {invoice.amount_paid.toFixed(2)}€
-                      </p>
+                      <p className="text-sm font-semibold text-slate-700">{invoice.amount_paid.toFixed(2)}€</p>
                     </div>
                   )}
                   {invoice.payment_date && invoice.status === 'payee' && (
                     <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
                       <div>
                         <p className="text-sm font-medium text-slate-700">Paiement complet</p>
-                        <p className="text-xs text-foreground-muted">
-                          {formatDate(invoice.payment_date)}
-                        </p>
+                        <p className="text-xs text-foreground-muted">{formatDate(invoice.payment_date)}</p>
                         {invoice.payment_method && (
-                          <p className="text-xs text-foreground-muted">
-                            Moyen: {invoice.payment_method}
-                          </p>
+                          <p className="text-xs text-foreground-muted">Moyen: {invoice.payment_method}</p>
                         )}
                       </div>
-                      <p className="text-sm font-semibold text-slate-700">
-                        {invoice.amount_paid.toFixed(2)}€
-                      </p>
+                      <p className="text-sm font-semibold text-slate-700">{invoice.amount_paid.toFixed(2)}€</p>
                     </div>
                   )}
                 </div>
@@ -266,16 +351,14 @@ const InvoiceDetail = () => {
           )}
         </div>
 
-        {/* Actions Sidebar */}
         <div className="space-y-6">
-          {/* Quick Actions */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {invoice.status === 'brouillon' && (
-                <Button 
+                <Button
                   className="w-full"
                   onClick={handleSendInvoice}
                   disabled={updating}
@@ -285,10 +368,9 @@ const InvoiceDetail = () => {
                   Envoyer la facture
                 </Button>
               )}
-              
               {invoice.status !== 'payee' && invoice.status !== 'brouillon' && (
                 <>
-                  <Button 
+                  <Button
                     className="w-full"
                     onClick={() => {
                       setPaymentType('full');
@@ -301,8 +383,7 @@ const InvoiceDetail = () => {
                     <Check className="w-4 h-4 mr-2" />
                     Marquer comme payée
                   </Button>
-                  
-                  <Button 
+                  <Button
                     variant="secondary"
                     className="w-full"
                     onClick={() => {
@@ -321,7 +402,31 @@ const InvoiceDetail = () => {
             </CardContent>
           </Card>
 
-          {/* Status Info */}
+          <Card className="border-indigo-100 bg-indigo-50">
+            <CardHeader>
+              <CardTitle className="text-lg text-indigo-800">🔗 Envoyer vers Abby</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {abbyError && (
+                <p className="text-xs text-red-600 bg-red-50 p-2 rounded-lg">{abbyError}</p>
+              )}
+              {abbySuccess && (
+                <p className="text-xs text-green-700 bg-green-50 p-2 rounded-lg">{abbySuccess}</p>
+              )}
+              <Button
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+                onClick={handleSendToAbby}
+                disabled={abbyLoading}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                {abbyLoading ? 'Envoi en cours...' : 'Envoyer vers Abby'}
+              </Button>
+              <p className="text-xs text-indigo-600">
+                La facture sera créée en brouillon dans votre compte Abby.
+              </p>
+            </CardContent>
+          </Card>
+
           <Card className="bg-background-subtle">
             <CardContent className="pt-6">
               <div className="space-y-3 text-sm">
@@ -343,16 +448,12 @@ const InvoiceDetail = () => {
                   </p>
                 )}
                 {invoice.status === 'payee' && (
-                  <p className="text-green-600 font-medium">
-                    ✓ Facture entièrement payée
-                  </p>
+                  <p className="text-green-600 font-medium">✓ Facture entièrement payée</p>
                 )}
                 {invoice.status === 'impayee' && (
                   <div className="flex items-start gap-2 text-red-600">
                     <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm">
-                      Cette facture est impayée. Délai de paiement dépassé.
-                    </p>
+                    <p className="text-sm">Cette facture est impayée. Délai de paiement dépassé.</p>
                   </div>
                 )}
               </div>
@@ -361,7 +462,6 @@ const InvoiceDetail = () => {
         </div>
       </div>
 
-      {/* Payment Modal */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="max-w-md w-full">
@@ -388,7 +488,6 @@ const InvoiceDetail = () => {
                   </p>
                 </div>
               )}
-              
               {paymentType === 'full' && (
                 <div className="p-3 bg-green-50 rounded-lg border border-green-200">
                   <p className="text-sm font-medium text-slate-700 mb-1">Montant à payer</p>
@@ -397,7 +496,6 @@ const InvoiceDetail = () => {
                   </p>
                 </div>
               )}
-
               <div>
                 <Label htmlFor="payment-method">Moyen de paiement</Label>
                 <select
@@ -412,7 +510,6 @@ const InvoiceDetail = () => {
                   ))}
                 </select>
               </div>
-
               <div className="flex gap-3 pt-4">
                 <Button
                   variant="outline"
