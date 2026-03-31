@@ -31,7 +31,7 @@ const ProfileSettings = () => {
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [openSections, setOpenSections] = useState({ identity: true, structure: false, legal: false, bank: false, horaires: false, media: false });
+  const [openSections, setOpenSections] = useState({ identity: true, structure: false, legal: false, bank: false, horaires: false, media: false, integrations: false });
 
   const defaultHoraires = DAYS.reduce((acc, day) => ({ ...acc, [day]: { open: false, start: '09:00', end: '18:00' } }), {});
 
@@ -42,7 +42,7 @@ const ProfileSettings = () => {
     siret: '', siren: '', rcs: '', capital_social: '', tva_intracommunautaire: '', code_ape: '',
     banque: '', code_banque: '', numero_compte: '', iban: '', swift_bic: '', code_nan: '', ics: '',
     horaires: defaultHoraires,
-    avatar_url: '', signature_url: '', logo_url: '',
+    avatar_url: '', signature_url: '', logo_url: '', abby_api_key: '',
   });
 
   useEffect(() => {
@@ -276,6 +276,20 @@ const ProfileSettings = () => {
         </AccordionSection>
 
         {/* Bouton save fixe */}
+        {/* SECTION 7 - Intégrations */}
+        <AccordionSection title="Intégrations" icon={CreditCard} iconBg="bg-indigo-50 text-indigo-600" isOpen={openSections.integrations} onToggle={() => toggleSection('integrations')}>
+          <div className="space-y-4">
+            <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+              <p className="text-sm font-medium text-indigo-800 mb-1">🔗 Connexion Abby</p>
+              <p className="text-xs text-indigo-600 mb-3">Connectez votre compte Abby pour envoyer vos factures directement depuis Passerelle. Récupérez votre clé API depuis <strong>Abby → Paramètres → Intégrations</strong>.</p>
+            </div>
+            <div>
+              <Label>Clé API Abby</Label>
+              <Input {...f('abby_api_key')} placeholder="suk-..." />
+            </div>
+          </div>
+        </AccordionSection>
+       
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 md:pl-72 z-30">
           <div className="max-w-4xl mx-auto flex gap-4">
             <Button type="button" variant="danger" onClick={() => { logout(); navigate('/accueil'); }} className="flex-shrink-0">
