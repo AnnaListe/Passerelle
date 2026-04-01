@@ -88,21 +88,32 @@ const Children = () => {
     }
   };
 
-  const linkChild = async (child) => {
-    setLinking(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('children').update({ professional_id: user.id }).eq('id', child.id);
-      setShowLinkModal(false);
-      setLinkEmail('');
-      setLinkSearchResult(null);
-      loadChildren();
-    } catch (error) {
-      console.error('Error linking:', error);
-    } finally {
-      setLinking(false);
-    }
-  };
+  
+    const linkChild = async (child) => {
+      setLinking(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        await supabase.from('notifications').insert({
+          user_id: linkSearchResult.parent.id,
+          type: 'liaison_demande',
+          title: 'Demande de liaison',
+          message: `Un professionnel souhaite être lié à ${child.first_name} ${child.last_name}. Rendez-vous dans votre espace pour accepter ou refuser.`,
+          data: JSON.stringify({
+            professional_id: user.id,
+            child_id: child.id,
+          }),
+          read: false,
+        });
+        setShowLinkModal(false);
+        setLinkEmail('');
+        setLinkSearchResult(null);
+        alert('Demande envoyée au parent ! La liaison sera effective après validation.');
+      } catch (error) {
+        console.error('Error linking:', error);
+      } finally {
+        setLinking(false);
+      }
+    };
 
 
 

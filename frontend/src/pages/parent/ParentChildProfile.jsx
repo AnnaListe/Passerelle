@@ -248,7 +248,7 @@ export default function ParentChildProfile() {
       setChild(child);
       setGeneral(child);
       setShowCreateChild(false);
-      loadData();
+      await loadData();
     } catch (error) {
       console.error('Error creating child:', error);
     } finally {
@@ -326,8 +326,9 @@ export default function ParentChildProfile() {
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <p className="font-heading font-semibold text-slate-500 mb-2">Aucun enfant lié</p>
         <p className="text-sm text-slate-400 font-body mb-6">Créez le dossier de votre enfant ou attendez l'invitation d'un professionnel.</p>
-        <button onClick={() => setShowCreateChild(true)}
-          className="px-6 py-3 bg-sage-500 text-white rounded-full font-heading font-semibold text-sm shadow-sage">
+        <button 
+          onClick={() => setShowCreateChild(true)} 
+          style={{backgroundColor: '#16a34a', color: 'white', padding: '12px 24px', borderRadius: '999px', fontWeight: '600', fontSize: '14px', border: 'none', cursor: 'pointer'}}>
           Créer le dossier de mon enfant
         </button>
       </div>

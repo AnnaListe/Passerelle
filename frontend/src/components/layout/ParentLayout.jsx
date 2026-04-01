@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Calendar, MessageCircle, FileText, User, Heart } from 'lucide-react';
+import { Home, Calendar, MessageCircle, FileText, User, Heart, Bell } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 const NAV_ITEMS = [
   { path: '/parent/dashboard', icon: Home, label: 'Accueil' },
@@ -13,10 +15,133 @@ const NAV_ITEMS = [
 const ParentLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  useEffect(() => {
+    if (user) loadNotifications();
+  }, [user]);
+
+  const loadNotifications = async () => {
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('read', false)
+      .order('created_at', { ascending: false });
+    setNotifications(data || []);
+  };
+
+  const handleAcceptLiaison = async (notif) => {
+    try {
+      const notifData = JSON.parse(notif.data || '{}');
+      
+      // Mettre à jour professional_id sur l'enfant
+      await supabase.from('children')
+        .update({ professional_id: notifData.professional_id })
+        .eq('id', notifData.child_id);
+
+      // Créer le lien parent-enfant si pas déjà fait
+      await supabase.from('parent_child_links').upsert({
+        parent_id: user.id,
+        child_id: notifData.child_id,
+      });
+
+      // Récupérer les infos du pro
+      const { data: proProfile } = await supabase
+        .from('professional_profiles')
+        .select('*')
+        .eq('id', notifData.professional_id)
+        .maybeSingle();
+
+      // Ajouter le pro dans child_professionals
+      await supabase.from('child_professionals').upsert({
+        child_id: notifData.child_id,
+        professional_id: notifData.professional_id,
+        professional_name: proProfile ? `${proProfile.first_name} ${proProfile.last_name}` : '',
+        profession: proProfile?.profession || '',
+        phone: proProfile?.phone || '',
+        email: proProfile?.structure_email || '',
+        is_on_passerelle: true,
+        access_mode: 'full',
+      });
+
+      // Marquer la notification comme lue
+      await supabase.from('notifications')
+        .update({ read: true })
+        .eq('id', notif.id);
+
+      await loadNotifications();
+      setShowNotifications(false);
+    } catch (error) {
+      console.error('Erreur acceptation liaison:', error);
+    }
+  };
+
+  const handleRefuseLiaison = async (notif) => {
+    await supabase.from('notifications')
+      .update({ read: true })
+      .eq('id', notif.id);
+    await loadNotifications();
+  };
 
   return (
     <div className="min-h-screen bg-stone-50">
       <div className="max-w-md mx-auto min-h-screen bg-stone-50 relative overflow-x-hidden shadow-2xl">
+        {/* Header avec cloche */}
+        <div className="sticky top-0 z-40 bg-stone-50/80 backdrop-blur-xl border-b border-stone-100 px-5 py-3 flex items-center justify-between">
+          <span className="font-heading font-bold text-slate-800 text-lg">Passerelle</span>
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative p-2 rounded-xl bg-white shadow-card"
+          >
+            <Bell size={20} className="text-slate-600" />
+            {notifications.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {notifications.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Panel notifications */}
+        {showNotifications && (
+          <div className="absolute top-16 right-4 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-stone-100 overflow-hidden">
+            <div className="p-4 border-b border-stone-100">
+              <p className="font-heading font-bold text-slate-800">Notifications</p>
+            </div>
+            {notifications.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-6">Aucune notification</p>
+            ) : (
+              <div className="divide-y divide-stone-100">
+                {notifications.map(notif => (
+                  <div key={notif.id} className="p-4">
+                    <p className="font-heading font-semibold text-sm text-slate-700 mb-1">{notif.title}</p>
+                    <p className="text-xs text-slate-500 font-body mb-3">{notif.message}</p>
+                    {notif.type === 'liaison_demande' && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleAcceptLiaison(notif)}
+                          style={{backgroundColor: '#16a34a', color: 'white', padding: '8px', borderRadius: '12px', fontWeight: '600', fontSize: '12px', border: 'none', cursor: 'pointer', flex: 1}}
+                        >
+                          Accepter
+                        </button>
+                        <button
+                          onClick={() => handleRefuseLiaison(notif)}
+                          className="flex-1 py-2 bg-slate-100 text-slate-600 text-xs font-heading font-semibold rounded-xl"
+                        >
+                          Refuser
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Content */}
         <div className="pb-20">
           <Outlet />
