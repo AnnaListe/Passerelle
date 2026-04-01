@@ -437,7 +437,12 @@ export const dashboardAPI = {
         recent_children: childrenRes.data || [],
         upcoming_appointments: appointmentsRes.data || [],
         recent_invoices: invoicesRes.data || [],
-        recent_messages: [],
+        recent_messages: (await supabase.from('conversations').select('*, children(first_name, last_name)').eq('professional_id', user.id).order('last_message_at', { ascending: false }).limit(3)).data?.map(conv => ({ 
+          conversation: conv,
+          parent: { first_name: conv.children?.first_name, last_name: conv.children?.last_name },
+          last_message: { content: conv.last_message_content || '' },
+          unread_count: 0
+        })) || [],
         recent_documents: [],
         pending_invoices_count: (invoicesRes.data || []).filter(i => i.status === 'en_attente_paiement').length,
         overdue_invoices_count: (invoicesRes.data || []).filter(i => i.status === 'impayee').length,

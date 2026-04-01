@@ -7,8 +7,17 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 const formatTime = (dt) => {
-  try { return format(new Date(dt), "HH'h'mm", { locale: fr }); } catch { return ''; }
+  try {
+    const utcDt = dt.includes('Z') || dt.includes('+') ? dt : dt.replace(' ', 'T') + 'Z';
+    return new Date(utcDt).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Europe/Paris',
+      hour12: false
+    });
+  } catch { return ''; }
 };
+
 
 const formatDateLabel = (dt) => {
   try { return format(new Date(dt), "EEEE d MMMM", { locale: fr }); } catch { return ''; }
@@ -78,7 +87,7 @@ export default function ParentConversation() {
   let lastDateLabel = null;
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 80px)' }}>
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 140px)' }}>
       {/* Header */}
       <div className="px-5 py-3 bg-white border-b border-stone-100 flex items-center gap-3 flex-shrink-0">
         <button onClick={() => fromPro ? navigate(`/parent/professionnels/${proId}`) : navigate('/parent/messages')} className="text-slate-400 hover:text-slate-600">
@@ -124,7 +133,7 @@ export default function ParentConversation() {
       </div>
 
       {/* Input */}
-      <div className="fixed bottom-16 left-0 right-0 max-w-[480px] mx-auto bg-white border-t border-stone-100 px-4 py-3">
+      <div className="fixed bottom-20 left-0 right-0 max-w-md mx-auto bg-white border-t border-stone-100 px-4 py-3 z-50">
         <div className="flex items-end gap-2">
           <textarea
             value={content}
@@ -138,7 +147,7 @@ export default function ParentConversation() {
           <button
             onClick={sendMessage}
             disabled={!content.trim() || sending}
-            className="w-10 h-10 rounded-full bg-sage-500 flex items-center justify-center text-white flex-shrink-0 disabled:opacity-40 shadow-sage"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white flex-shrink-0 disabled:opacity-40" style={{backgroundColor: '#4A9B8F'}}
           >
             {sending ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send size={16} />}
           </button>

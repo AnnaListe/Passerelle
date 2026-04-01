@@ -27,6 +27,8 @@ export default function ParentMessages() {
   const [showNew, setShowNew] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [selectedPro, setSelectedPro] = useState(null);
+  const [linkedPros, setLinkedPros] = useState([]);
   const [childId, setChildId] = useState(null);
 
   useEffect(() => {
@@ -37,6 +39,11 @@ export default function ParentMessages() {
     try {
       const { data: link } = await supabase.from('parent_child_links').select('child_id').eq('parent_id', user.id).maybeSingle();
       if (link?.child_id) setChildId(link.child_id);
+      const { data: pros } = await supabase
+        .from('child_professionals')
+        .select('*')
+        .eq('child_id', link.child_id);
+      setLinkedPros(pros || []);
 
       const { data: convs } = await supabase.from('conversations').select('*, children(first_name, last_name)')
         .or(`professional_id.eq.${user.id},parent_id.eq.${user.id}`)
@@ -51,31 +58,34 @@ export default function ParentMessages() {
   };
 
   const handleNewConversation = async () => {
-    if (!newMessage.trim()) return;
-    setSending(true);
-    try {
-      const { data: conv } = await supabase.from('conversations').insert({
-        parent_id: user.id,
-        child_id: childId || null,
-        last_message_at: new Date().toISOString(),
-      }).select().single();
+  if (!newMessage.trim() || !selectedPro) return;
+  setSending(true);
+  try {
+    const { data: conv } = await supabase.from('conversations').insert({
+      parent_id: user.id,
+      child_id: childId || null,
+      professional_id: selectedPro.professional_id,
+      pro_name: selectedPro.professional_name,
+      last_message_at: new Date().toISOString(),
+    }).select().single();
 
-      await supabase.from('messages').insert({
-        conversation_id: conv.id,
-        sender_id: user.id,
-        sender_type: 'parent',
-        content: newMessage.trim(),
-      });
+    await supabase.from('messages').insert({
+      conversation_id: conv.id,
+      sender_id: user.id,
+      sender_type: 'parent',
+      content: newMessage.trim(),
+    });
 
-      setShowNew(false);
-      setNewMessage('');
-      navigate(`/parent/messages/${conv.id}`);
-    } catch (error) {
-      console.error('Error creating conversation:', error);
-    } finally {
-      setSending(false);
-    }
-  };
+    setShowNew(false);
+    setNewMessage('');
+    setSelectedPro(null);
+    navigate(`/parent/messages/${conv.id}`);
+  } catch (error) {
+    console.error('Error creating conversation:', error);
+  } finally {
+    setSending(false);
+  }
+};
 
   if (loading) return (
     <div className="p-5 space-y-3">
@@ -89,7 +99,7 @@ export default function ParentMessages() {
         <h1 className="page-title">Messages</h1>
         <button
           onClick={() => setShowNew(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-sage-500 text-white rounded-full font-heading font-semibold text-sm shadow-sage"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-full font-heading font-semibold text-sm" style={{backgroundColor: '#4A9B8F', color: 'white'}}
         >
           <Plus size={15} /> Nouveau
         </button>
@@ -102,7 +112,7 @@ export default function ParentMessages() {
           </div>
           <p className="font-heading font-semibold text-slate-500">Aucune conversation</p>
           <p className="text-sm text-slate-400 font-body mt-1">Démarrez une conversation avec un professionnel</p>
-          <button onClick={() => setShowNew(true)} className="mt-4 px-5 py-2.5 bg-sage-500 text-white rounded-full font-heading font-semibold text-sm shadow-sage">
+          <button onClick={() => setShowNew(true)} className="mt-4 px-5 py-2.5 rounded-full font-heading font-semibold text-sm" style={{backgroundColor: '#4A9B8F', color: 'white'}}>
             Nouveau message
           </button>
         </div>
@@ -130,7 +140,7 @@ export default function ParentMessages() {
 
       {/* Modal nouveau message */}
       {showNew && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end justify-center">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="w-full max-w-[480px] bg-white rounded-t-3xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-heading font-bold text-lg text-slate-800">Nouveau message</h3>
@@ -138,7 +148,36 @@ export default function ParentMessages() {
                 <X size={16} className="text-slate-500" />
               </button>
             </div>
-            <textarea
+            <div className="mb-4">
+              <p className="text-xs text-slate-400 font-body mb-2">Destinataire</p>
+              <div className="space-y-2">
+                {linkedPros.map(pro => (
+                  <button
+                    key={pro.id}
+                    onClick={() => setSelectedPro(pro)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition-all ${
+                      selectedPro?.id === pro.id
+                        ? 'border-green-400 bg-green-50'
+                        : 'border-stone-200 bg-stone-50'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{backgroundColor: '#E0F2F0'}}>
+                      <span className="font-heading font-bold text-xs" style={{color: '#4A9B8F'}}>
+                        {pro.professional_name?.[0] || 'P'}
+                      </span>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-heading font-semibold text-slate-700">{pro.professional_name}</p>
+                      <p className="text-xs text-slate-400 font-body">{pro.profession}</p>
+                    </div>
+                  </button>
+                ))}
+                {linkedPros.length === 0 && (
+                  <p className="text-sm text-slate-400 font-body text-center py-2">Aucun professionnel lié</p>
+                )}
+              </div>
+            </div>
+<textarea
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Écrivez votre message..."
@@ -148,7 +187,7 @@ export default function ParentMessages() {
             <button
               onClick={handleNewConversation}
               disabled={!newMessage.trim() || sending}
-              className="w-full h-12 bg-sage-500 text-white rounded-2xl font-heading font-semibold flex items-center justify-center gap-2 disabled:opacity-40 shadow-sage"
+              className="w-full h-12 text-white rounded-2xl font-heading font-semibold flex items-center justify-center gap-2 disabled:opacity-40" style={{backgroundColor: '#4A9B8F'}}
             >
               {sending ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send size={16} />}
               Envoyer
