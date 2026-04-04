@@ -41,6 +41,7 @@ export default function ParentPlanning() {
   const [scheduleItems, setScheduleItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [childId, setChildId] = useState(null);
+  const [child, setChild] = useState(null);
   const [linkedPros, setLinkedPros] = useState([]);
 
   // Modal
@@ -69,6 +70,8 @@ export default function ParentPlanning() {
     const { data } = await supabase.from('parent_child_links').select('child_id').eq('parent_id', user.id).maybeSingle();
     if (data?.child_id) {
       setChildId(data.child_id);
+    const { data: childData } = await supabase.from('children').select('*').eq('id', data.child_id).single();
+    setChild(childData);
       // Charger les pros liés
       const { data: pros } = await supabase.from('child_professionals').select('*').eq('child_id', data.child_id);
       setLinkedPros(pros?.filter(p => p.is_on_passerelle) || []);
@@ -114,7 +117,7 @@ export default function ParentPlanning() {
           user_id: formData.pro_id,
           type: 'rdv_demande',
           title: 'Demande de rendez-vous',
-          message: `Le parent de ${childId} demande un rendez-vous : "${formData.title}" le ${format(new Date(formData.date), 'dd/MM/yyyy', { locale: fr })} de ${formData.start_time} à ${formData.end_time}.`,
+          message: `Le parent de ${child?.first_name || ''} ${child?.last_name || ''} demande un rendez-vous : "${formData.title}" le ${format(new Date(formData.date), 'dd/MM/yyyy', { locale: fr })} de ${formData.start_time} à ${formData.end_time}.`,
           data: JSON.stringify({
             child_id: childId,
             title: formData.title,
@@ -317,7 +320,7 @@ export default function ParentPlanning() {
       {/* Modal ajout RDV */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-[480px] bg-white rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-[480px] bg-white rounded-3xl p-6 max-h-[80vh] overflow-y-auto mb-20">
             <div className="flex items-center justify-between mb-5">
               <h3 className="font-heading font-bold text-lg text-slate-800">Ajouter un rendez-vous</h3>
               <button onClick={() => setShowModal(false)} className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center">
