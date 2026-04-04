@@ -455,8 +455,8 @@ const ChildPlanning = () => {
                 className={`min-h-[300px] ${holiday ? 'bg-amber-50' : ''}`}
               >
                 {/* En-tête du jour */}
-                <div className={`p-3 text-center border-b border-slate-200 ${isToday ? 'bg-primary-light' : 'bg-background-subtle'}`}>
-                  <div className={`text-xs font-medium uppercase mb-1 ${isToday ? 'text-primary' : 'text-foreground-muted'}`}>
+                <div className={`p-3 text-center border-b border-slate-200 ${isToday ? 'bg-primary' : 'bg-background-subtle'}`}>
+                  <div className={`text-xs font-medium uppercase mb-1 ${isToday ? 'text-white' : 'text-foreground-muted'}`}>
                     {day.toLocaleDateString('fr-FR', { weekday: 'short' })}
                   </div>
                   <div className={`text-xl font-bold ${isToday ? 'text-primary' : 'text-slate-800'}`}>
